@@ -22,6 +22,25 @@ function App() {
     return defaultUser;
   });
 
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    const saved = localStorage.getItem('bb_admin_theme');
+    return (saved as 'dark' | 'light') || 'dark';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'light') {
+      root.classList.add('light-theme');
+    } else {
+      root.classList.remove('light-theme');
+    }
+    localStorage.setItem('bb_admin_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
+
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
@@ -362,6 +381,8 @@ function App() {
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           currentUser={currentUser}
           onLogout={handleLogout}
+          theme={theme}
+          toggleTheme={toggleTheme}
         />
         
         {activeTab === 'dashboard' && (

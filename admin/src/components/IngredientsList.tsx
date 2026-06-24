@@ -149,11 +149,11 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
 
                 return (
                   <tr key={ing.id}>
-                    <td style={{ fontWeight: '600', color: '#fff' }}>{ing.name}</td>
+                    <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{ing.name}</td>
                     <td>
                       <span style={styles.categoryBadge}>{ing.category}</span>
                     </td>
-                    <td style={{ fontWeight: '700', color: isOutOfStock ? '#ef4444' : isLowStock ? '#f59e0b' : '#fff' }}>
+                    <td style={{ fontWeight: '700', color: isOutOfStock ? '#ef4444' : isLowStock ? '#f59e0b' : 'var(--text-primary)' }}>
                       {ing.stock_level} {ing.unit}
                     </td>
                     <td style={{ color: '#9ca3af' }}>
@@ -239,7 +239,7 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
                     style={{ width: '100%' }}
                   >
                     {categories.map(c => (
-                      <option key={c} value={c} style={{ backgroundColor: '#121217' }}>{c}</option>
+                      <option key={c} value={c} style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>{c}</option>
                     ))}
                   </select>
                 </div>
@@ -252,11 +252,11 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
                     onChange={(e) => setUnit(e.target.value)}
                     style={{ width: '100%' }}
                   >
-                    <option value="kg" style={{ backgroundColor: '#121217' }}>kg</option>
-                    <option value="L" style={{ backgroundColor: '#121217' }}>Liters (L)</option>
-                    <option value="pcs" style={{ backgroundColor: '#121217' }}>pieces (pcs)</option>
-                    <option value="bags" style={{ backgroundColor: '#121217' }}>bags</option>
-                    <option value="g" style={{ backgroundColor: '#121217' }}>grams (g)</option>
+                    <option value="kg" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>kg</option>
+                    <option value="L" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Liters (L)</option>
+                    <option value="pcs" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>pieces (pcs)</option>
+                    <option value="bags" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>bags</option>
+                    <option value="g" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>grams (g)</option>
                   </select>
                 </div>
               </div>
@@ -352,12 +352,12 @@ const styles = {
     gap: '8px'
   },
   categoryBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'var(--input-bg)',
+    border: '1px solid var(--border-glass)',
     padding: '3px 8px',
     borderRadius: '4px',
     fontSize: '0.75rem',
-    color: '#9ca3af',
+    color: 'var(--text-muted)',
     fontWeight: '500'
   },
   statusNormal: {
@@ -399,13 +399,13 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '16px 20px',
-    borderBottom: '1px solid rgba(255,255,255,0.05)'
+    borderBottom: '1px solid var(--border-glass)'
   },
   modalTitle: {
     margin: 0,
     fontSize: '1.1rem',
     fontWeight: '700',
-    color: '#fff'
+    color: 'var(--text-primary)'
   },
   modalBody: {
     padding: '20px',
