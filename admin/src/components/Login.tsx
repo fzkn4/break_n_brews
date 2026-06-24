@@ -55,14 +55,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin, theme, toggleTheme }) => 
     }, 800);
   };
 
-  const handleQuickLogin = (acc: typeof accounts[0]) => {
-    setLoading(true);
-    setTimeout(() => {
-      onLogin({ name: acc.name, email: acc.email, role: acc.role });
-      setLoading(false);
-    }, 400);
-  };
-
   return (
     <div style={styles.loginContainer}>
       {/* Floating Theme Switcher */}
@@ -147,31 +139,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin, theme, toggleTheme }) => 
           </button>
         </form>
 
-        <div style={styles.dividerContainer}>
-          <div style={styles.dividerLine} />
-          <span style={styles.dividerText}>QUICK DEMO ACCESSIBILITY</span>
-          <div style={styles.dividerLine} />
-        </div>
-
-        <div style={styles.quickLoginList}>
-          {accounts.map((acc) => (
-            <button
-              key={acc.email}
-              onClick={() => handleQuickLogin(acc)}
-              className="quick-login-btn"
-              type="button"
-              disabled={loading}
-            >
-              <div style={styles.quickLoginInfo}>
-                <span style={styles.quickLoginName}>{acc.name}</span>
-                <span style={styles.quickLoginDesc}>{acc.desc}</span>
-              </div>
-              <span className={acc.role === 'admin' ? 'badge badge-available' : 'badge badge-maintenance'}>
-                {acc.role}
-              </span>
-            </button>
-          ))}
-        </div>
       </div>
     </div>
   );
