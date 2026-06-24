@@ -67,7 +67,11 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         {/* Brand Header */}
         <div style={styles.brandHeader}>
           <div style={styles.logoContainer}>
-            <Coffee size={32} color="#f59e0b" style={styles.logoIcon} />
+            <img 
+              src="/break_and_brews.png" 
+              alt="Break & Brews Logo" 
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+            />
           </div>
           <h2 style={styles.brandTitle}>BREAK & BREWS</h2>
           <p style={styles.brandSubtitle}>Admin & Staff Operations Portal</p>
@@ -204,7 +208,8 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: '16px',
-    boxShadow: '0 0 20px rgba(245, 158, 11, 0.05)'
+    boxShadow: '0 0 20px rgba(245, 158, 11, 0.05)',
+    overflow: 'hidden'
   },
   logoIcon: {
     filter: 'drop-shadow(0 0 8px rgba(245, 158, 11, 0.3))'
