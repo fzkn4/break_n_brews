@@ -61,6 +61,9 @@ class MenuItem(db.Model):
     image_url = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Relationships
+    order_items = db.relationship('OrderItem', back_populates='menu_item', cascade='all, delete-orphan')
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -146,7 +149,7 @@ class OrderItem(db.Model):
     price_at_order = db.Column(db.Numeric(10, 2), nullable=False)
 
     # Relationships
-    menu_item = db.relationship('MenuItem')
+    menu_item = db.relationship('MenuItem', back_populates='order_items')
 
     def to_dict(self):
         return {

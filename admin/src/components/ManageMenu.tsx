@@ -19,6 +19,7 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
   const [editItem, setEditItem] = useState<MenuItem | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
 
   // Form states
   const [name, setName] = useState('');
@@ -136,17 +137,22 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
               key={item.id} 
               style={{
                 ...styles.card,
-                opacity: item.is_available ? 1 : 0.6
+                opacity: item.is_available ? 1 : 0.7
               }} 
-              className="glass-card"
+              className="glass-card menu-card"
             >
               {/* Product Image */}
               <div style={styles.imageWrapper}>
-                {item.image_url ? (
-                  <img src={item.image_url} alt={item.name} style={styles.img} />
+                {item.image_url && !imageErrors[item.id] ? (
+                  <img 
+                    src={item.image_url} 
+                    alt={item.name} 
+                    style={styles.img} 
+                    onError={() => setImageErrors(prev => ({ ...prev, [item.id]: true }))}
+                  />
                 ) : (
                   <div style={styles.imagePlaceholder}>
-                    <Coffee size={32} color="#6b7280" />
+                    <Coffee size={32} color="var(--text-secondary)" style={{ opacity: 0.5 }} />
                   </div>
                 )}
                 <span style={styles.categoryBadge}>{item.category}</span>
@@ -162,8 +168,7 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
                 <div style={styles.cardActions}>
                   <button 
                     onClick={() => toggleAvailability(item)}
-                    className={`btn ${item.is_available ? 'btn-secondary' : 'btn-danger'}`}
-                    style={{ padding: '6px 12px', gap: '6px', flex: 1, fontSize: '0.8rem' }}
+                    className={item.is_available ? 'menu-btn-active' : 'menu-btn-disabled'}
                   >
                     {item.is_available ? (
                       <>
@@ -181,16 +186,14 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button 
                       onClick={() => startEdit(item)}
-                      className="btn btn-secondary" 
-                      style={{ padding: '8px' }}
+                      className="menu-btn-edit" 
                       title="Edit Item"
                     >
                       <Edit2 size={14} />
                     </button>
                     <button 
                       onClick={() => onDeleteMenuItem(item.id)}
-                      className="btn btn-danger" 
-                      style={{ padding: '8px' }}
+                      className="menu-btn-delete" 
                       title="Delete Item"
                     >
                       <Trash2 size={14} />
@@ -336,6 +339,7 @@ const styles = {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
     gap: '20px',
+    alignItems: 'start',
     flex: 1
   },
   noResults: {
@@ -348,15 +352,17 @@ const styles = {
     color: '#6b7280'
   },
   card: {
+    padding: '0',
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column' as const,
-    transition: 'all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1)'
+    borderRadius: '16px',
+    border: '1px solid var(--border-glass)'
   },
   imageWrapper: {
     position: 'relative' as const,
     width: '100%',
-    height: '150px',
+    height: '155px',
     backgroundColor: 'rgba(255,255,255,0.01)',
     borderBottom: '1px solid var(--border-glass)',
     display: 'flex',
@@ -379,43 +385,43 @@ const styles = {
     position: 'absolute' as const,
     top: '12px',
     left: '12px',
-    backgroundColor: 'rgba(15, 15, 20, 0.75)',
-    backdropFilter: 'blur(4px)',
-    border: '1px solid var(--border-glass)',
-    padding: '3px 8px',
-    borderRadius: '4px',
-    fontSize: '0.7rem',
-    color: '#f59e0b',
-    fontWeight: '600',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    backdropFilter: 'blur(8px)',
+    border: '1px solid rgba(245, 158, 11, 0.3)',
+    padding: '4px 10px',
+    borderRadius: '20px',
+    fontSize: '0.65rem',
+    color: '#fbbf24',
+    fontWeight: '700',
     textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em'
+    letterSpacing: '0.08em'
   },
   cardDetails: {
-    padding: '16px',
+    padding: '20px',
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '12px',
+    gap: '16px',
     textAlign: 'left' as const
   },
   row: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'baseline'
+    alignItems: 'center'
   },
   itemName: {
     margin: 0,
-    fontSize: '1rem',
-    fontWeight: '700',
+    fontSize: '1.05rem',
+    fontWeight: '600',
     color: 'var(--text-primary)'
   },
   itemPrice: {
-    fontSize: '1.05rem',
-    fontWeight: '800',
+    fontSize: '1.15rem',
+    fontWeight: '700',
     color: '#f59e0b'
   },
   cardActions: {
     display: 'flex',
-    gap: '10px',
+    gap: '12px',
     alignItems: 'center',
     marginTop: '4px'
   },
