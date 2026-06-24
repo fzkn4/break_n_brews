@@ -8,13 +8,34 @@ import { ManageMenu } from './components/ManageMenu';
 import { ManageRequests } from './components/ManageRequests';
 import { RecordStockIn } from './components/RecordStockIn';
 import { Reports } from './components/Reports';
+import { Login } from './components/Login';
 import type { Ingredient, MenuItem, IngredientRequest, StockInLog, AnalyticsData, ReportData } from './types';
 
 const API_URL = 'http://localhost:5000/api';
 
 function App() {
+  const [currentUser, setCurrentUser] = useState<{ name: string; email: string; role: string } | null>(() => {
+    const saved = localStorage.getItem('bb_admin_user');
+    if (saved) return JSON.parse(saved);
+    const defaultUser = { name: 'Marcus Aurelius', email: 'marcus@breakandbrews.com', role: 'admin' };
+    localStorage.setItem('bb_admin_user', JSON.stringify(defaultUser));
+    return defaultUser;
+  });
+
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+
+  const handleLogout = () => {
+    localStorage.removeItem('bb_admin_user');
+    setCurrentUser(null);
+    showToast('Logged out successfully');
+  };
+
+  const handleLogin = (user: { name: string; email: string; role: string }) => {
+    localStorage.setItem('bb_admin_user', JSON.stringify(user));
+    setCurrentUser(user);
+    showToast(`Welcome back, ${user.name}!`);
+  };
   
   // Data States
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -22,6 +43,7 @@ function App() {
   const [requests, setRequests] = useState<IngredientRequest[]>([]);
   const [stockInLogs, setStockInLogs] = useState<StockInLog[]>([]);
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [analyticsDays, setAnalyticsDays] = useState<number>(7);
 
   // Global UX States
   const [loading, setLoading] = useState<boolean>(true);
@@ -40,7 +62,7 @@ function App() {
         fetch(`${API_URL}/menu`),
         fetch(`${API_URL}/requests`),
         fetch(`${API_URL}/stockin`),
-        fetch(`${API_URL}/analytics`)
+        fetch(`${API_URL}/analytics?days=${analyticsDays}`)
       ]);
 
       if (ingRes.ok) setIngredients(await ingRes.json());
@@ -61,18 +83,31 @@ function App() {
     syncInventoryData();
   }, []);
 
+  // Fetch analytics when timeframe changes
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        const res = await fetch(`${API_URL}/analytics?days=${analyticsDays}`);
+        if (res.ok) setAnalyticsData(await res.json());
+      } catch (err) {
+        console.error('Failed to fetch analytics for timeframe:', err);
+      }
+    };
+    fetchAnalytics();
+  }, [analyticsDays]);
+
   // Periodic polling for real-time dashboard alerts every 7 seconds
   useEffect(() => {
     const pollTimer = setInterval(async () => {
       try {
-        const analyticsRes = await fetch(`${API_URL}/analytics`);
+        const analyticsRes = await fetch(`${API_URL}/analytics?days=${analyticsDays}`);
         if (analyticsRes.ok) setAnalyticsData(await analyticsRes.json());
       } catch (err) {
         console.error('Failed to sync live state:', err);
       }
     }, 7000);
     return () => clearInterval(pollTimer);
-  }, []);
+  }, [analyticsDays]);
 
   // ------------ INGREDIENTS HANDLERS ------------
   const handleCreateIngredient = async (data: any) => {
@@ -284,6 +319,19 @@ function App() {
   const lowStockCount = ingredients.filter(i => i.stock_level <= i.reorder_point).length;
   const pendingRequestsCount = requests.filter(r => r.status === 'pending').length;
 
+  if (!currentUser) {
+    return (
+      <>
+        <Login onLogin={handleLogin} />
+        {toast && (
+          <div className={`toast ${toast.type === 'error' ? 'toast-error' : ''}`}>
+            <span>{toast.message}</span>
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="app-container">
       {/* Mobile Sidebar backdrop */}
@@ -312,6 +360,8 @@ function App() {
         <Topbar 
           activeTab={activeTab} 
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+          currentUser={currentUser}
+          onLogout={handleLogout}
         />
         
         {activeTab === 'dashboard' && (
@@ -320,6 +370,10 @@ function App() {
             loading={loading}
             onApproveRequest={handleApproveRequest}
             onRejectRequest={handleRejectRequest}
+            analyticsDays={analyticsDays}
+            setAnalyticsDays={setAnalyticsDays}
+            ingredients={ingredients}
+            onCreateRequest={handleCreateRequest}
           />
         )}
         

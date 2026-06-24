@@ -56,7 +56,7 @@ def manage_ingredients():
 
 @app.route('/api/ingredients/<int:id>', methods=['PUT', 'DELETE'])
 def update_ingredient(id):
-    ing = Ingredient.query.get_or_400(id)
+    ing = Ingredient.query.get_or_404(id)
     if request.method == 'DELETE':
         db.session.delete(ing)
         db.session.commit()
@@ -113,7 +113,7 @@ def manage_menu():
 
 @app.route('/api/menu/<int:id>', methods=['PUT', 'DELETE'])
 def update_menu_item(id):
-    item = MenuItem.query.get_or_400(id)
+    item = MenuItem.query.get_or_404(id)
     if request.method == 'DELETE':
         db.session.delete(item)
         db.session.commit()
@@ -173,7 +173,7 @@ def manage_requests():
 
 @app.route('/api/requests/<int:id>', methods=['PUT', 'DELETE'])
 def update_request(id):
-    req = IngredientRequest.query.get_or_400(id)
+    req = IngredientRequest.query.get_or_404(id)
     
     if request.method == 'DELETE':
         db.session.delete(req)
@@ -323,6 +323,11 @@ def get_analytics():
     today_start = datetime(now.year, now.month, now.day)
     thirty_days_ago = today_start - timedelta(days=30)
     
+    # Read dynamic timeframe (default 7 days)
+    days = request.args.get('days', default=7, type=int)
+    if days < 1:
+        days = 7
+    
     # 1. KPIs
     total_ingredients = Ingredient.query.count()
     
@@ -337,9 +342,9 @@ def get_analytics():
     total_stock_in_value = sum(float(log.cost) for log in recent_stock_ins)
 
     # 2. Charts Data
-    # 7-day revenue trend
+    # Dynamic-day revenue trend
     revenue_trend = []
-    for d in range(6, -1, -1):
+    for d in range(days - 1, -1, -1):
         target_day = today_start - timedelta(days=d)
         end_day = target_day + timedelta(days=1)
         day_txns = Transaction.query.filter(Transaction.created_at >= target_day, Transaction.created_at < end_day).all()
