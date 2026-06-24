@@ -4,17 +4,17 @@ A premium administrative dashboard for managing real-time billiard table rentals
 
 ---
 
-## 🚀 How to Run the Project
+## How to Run the Project
 
 Follow these steps to run both the backend API server and the frontend interface.
 
-### 📋 Prerequisites
+### Prerequisites
 1. **PostgreSQL**: Ensure PostgreSQL is running locally. The backend is configured to connect to:
    `postgresql://postgres:password@localhost:5432/break_and_brews`
 
 ---
 
-### 🐍 1. Running the Backend (Flask API)
+### 1. Running the Backend (Flask API)
 
 The backend runs a REST API on port `5000` to serve table status updates, process cafe orders, and generate billing summaries.
 
@@ -38,7 +38,7 @@ The backend runs a REST API on port `5000` to serve table status updates, proces
 
 ---
 
-### ⚛️ 2. Running the Frontend (Vite + React)
+### 2. Running the Frontend (Vite + React)
 
 The frontend dev server hosts the user interface and communicates with the Flask API at regular intervals to keep stats, play timers, and order cards synchronized.
 
@@ -55,10 +55,10 @@ The frontend dev server hosts the user interface and communicates with the Flask
    npm run dev
    ```
 4. Open your browser and navigate to:
-   👉 **[http://localhost:5173](http://localhost:5173)**
+   **[http://localhost:5173](http://localhost:5173)**
 
 ---
 
-## 🛠️ Project Structure
+## Project Structure
 - **/backend**: Database models (`models.py`), database seeder (`seed.py`), and REST controllers (`app.py`).
 - **/frontend**: React dashboard SPA. Main dashboard and module pages are located under `/src/components/`. Types are defined in `/src/types.ts`.
