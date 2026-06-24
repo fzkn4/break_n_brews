@@ -678,3 +678,95 @@ body {
   transform: scale(1.05);
 }
 
+/* Premium Menu Item Card Layout & Transitions */
+.menu-card {
+  padding: 0 !important;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s, box-shadow 0.3s !important;
+}
+
+.menu-card:hover {
+  transform: translateY(-5px);
+  border-color: var(--accent-gold) !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.2), 0 0 20px var(--accent-gold-glow) !important;
+}
+
+/* Custom Icon Buttons in Menu Cards */
+.menu-btn-active {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.08);
+  color: #10b981;
+}
+.menu-btn-active:hover {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: #10b981;
+}
+
+.menu-btn-disabled {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+}
+.menu-btn-disabled:hover {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: #ef4444;
+}
+
+.menu-btn-edit {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-glass);
+  background: transparent;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.menu-btn-edit:hover {
+  background: var(--border-glass);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.menu-btn-delete {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.05);
+  color: #ef4444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.menu-btn-delete:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+}
+
+
+
