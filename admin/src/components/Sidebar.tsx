@@ -72,11 +72,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           );
         })}
       </nav>
-
-      <div style={styles.footer}>
-        <span style={styles.footerText}>Lounge Status: Open</span>
-        <span style={styles.footerVersion}>v1.1.0</span>
-      </div>
     </aside>
   );
 };
