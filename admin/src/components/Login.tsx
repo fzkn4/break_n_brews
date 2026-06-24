@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Coffee, Key, Mail, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { Coffee, Key, Mail, Eye, EyeOff, AlertTriangle, Sun, Moon } from 'lucide-react';
 
 interface LoginProps {
   onLogin: (user: { name: string; email: string; role: string }) => void;
+  theme: 'dark' | 'light';
+  toggleTheme: () => void;
 }
 
-export const Login: React.FC<LoginProps> = ({ onLogin }) => {
+export const Login: React.FC<LoginProps> = ({ onLogin, theme, toggleTheme }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -63,6 +65,17 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   return (
     <div style={styles.loginContainer}>
+      {/* Floating Theme Switcher */}
+      <div style={styles.themeToggleWrapper}>
+        <button 
+          className="theme-toggle-btn"
+          onClick={toggleTheme}
+          title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+        >
+          {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+        </button>
+      </div>
+
       <div style={styles.loginBox} className="glass-card fade-in">
         {/* Brand Header */}
         <div style={styles.brandHeader}>
@@ -171,23 +184,27 @@ const styles = {
     justifyContent: 'center',
     minHeight: '100vh',
     width: '100vw',
-    backgroundColor: '#0b0b0e',
-    backgroundImage: `
-      radial-gradient(circle at 10% 20%, rgba(245, 158, 11, 0.05) 0%, transparent 40%),
-      radial-gradient(circle at 90% 80%, rgba(124, 58, 237, 0.06) 0%, transparent 45%)
-    `,
+    backgroundColor: 'var(--bg-primary)',
+    backgroundImage: 'var(--bg-gradient)',
     padding: '24px',
-    boxSizing: 'border-box' as const
+    boxSizing: 'border-box' as const,
+    position: 'relative' as const
+  },
+  themeToggleWrapper: {
+    position: 'absolute' as const,
+    top: '24px',
+    right: '24px',
+    zIndex: 10
   },
   loginBox: {
     width: '100%',
     maxWidth: '460px',
     padding: '40px',
-    backgroundColor: 'rgba(18, 18, 23, 0.65)',
+    backgroundColor: 'var(--card-bg)',
     backdropFilter: 'blur(20px)',
-    border: '1px solid rgba(255, 255, 255, 0.07)',
+    border: '1px solid var(--border-glass)',
     borderRadius: '24px',
-    boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)',
+    boxShadow: 'var(--card-shadow)',
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '24px'
@@ -218,13 +235,13 @@ const styles = {
     margin: 0,
     fontSize: '1.6rem',
     fontWeight: '800',
-    color: '#fff',
+    color: 'var(--text-primary)',
     letterSpacing: '2px'
   },
   brandSubtitle: {
     margin: '4px 0 0 0',
     fontSize: '0.85rem',
-    color: '#9ca3af',
+    color: 'var(--text-muted)',
     fontWeight: '500'
   },
   errorAlert: {
@@ -254,7 +271,7 @@ const styles = {
   label: {
     fontSize: '0.8rem',
     fontWeight: '600',
-    color: '#9ca3af',
+    color: 'var(--text-muted)',
     textTransform: 'uppercase' as const,
     letterSpacing: '0.05em'
   },
@@ -305,11 +322,11 @@ const styles = {
   dividerLine: {
     flex: 1,
     height: '1px',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)'
+    backgroundColor: 'var(--border-glass)'
   },
   dividerText: {
     fontSize: '0.7rem',
-    color: '#9ca3af',
+    color: 'var(--text-muted)',
     fontWeight: '700',
     letterSpacing: '0.08em'
   },
@@ -325,11 +342,11 @@ const styles = {
   quickLoginName: {
     fontSize: '0.9rem',
     fontWeight: '600',
-    color: '#fff'
+    color: 'var(--text-primary)'
   },
   quickLoginDesc: {
     fontSize: '0.7rem',
-    color: '#9ca3af',
+    color: 'var(--text-muted)',
     marginTop: '2px'
   }
 };

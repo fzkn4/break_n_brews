@@ -341,7 +341,7 @@ function App() {
   if (!currentUser) {
     return (
       <>
-        <Login onLogin={handleLogin} />
+        <Login onLogin={handleLogin} theme={theme} toggleTheme={toggleTheme} />
         {toast && (
           <div className={`toast ${toast.type === 'error' ? 'toast-error' : ''}`}>
             <span>{toast.message}</span>
