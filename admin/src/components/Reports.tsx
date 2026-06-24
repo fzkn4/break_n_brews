@@ -121,7 +121,7 @@ export const Reports: React.FC<ReportsProps> = ({ onFetchReports }) => {
               <tbody>
                 {inventory_health.map((item) => (
                   <tr key={item.id}>
-                    <td style={{ fontWeight: '600', color: '#fff' }}>{item.name}</td>
+                    <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{item.name}</td>
                     <td>{item.category}</td>
                     <td style={{ fontWeight: '700' }}>{item.stock_level} {item.unit}</td>
                     <td style={{ color: '#9ca3af' }}>{item.reorder_point} {item.unit}</td>
@@ -185,7 +185,7 @@ export const Reports: React.FC<ReportsProps> = ({ onFetchReports }) => {
                 ) : (
                   supplier_summary.map((sup, idx) => (
                     <tr key={idx}>
-                      <td style={{ fontWeight: '600', color: '#fff' }}>{sup.supplier}</td>
+                      <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{sup.supplier}</td>
                       <td>{sup.shipments_count} shipments</td>
                       <td style={{ fontWeight: '700', color: '#f59e0b' }}>${sup.total_spent.toFixed(2)}</td>
                     </tr>
@@ -241,7 +241,7 @@ export const Reports: React.FC<ReportsProps> = ({ onFetchReports }) => {
                     const percentage = totalMenuSales > 0 ? (item.revenue / totalMenuSales) * 100 : 0;
                     return (
                       <tr key={idx}>
-                        <td style={{ fontWeight: '600', color: '#fff' }}>{item.menu_item}</td>
+                        <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{item.menu_item}</td>
                         <td style={{ fontWeight: '700', color: '#10b981' }}>${item.revenue.toFixed(2)}</td>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -329,12 +329,12 @@ const styles = {
   summaryVal: {
     fontSize: '1.5rem',
     fontWeight: '800',
-    color: '#fff'
+    color: 'var(--text-primary)'
   },
   summaryDivider: {
     width: '1px',
     height: '40px',
-    backgroundColor: 'rgba(255,255,255,0.08)'
+    backgroundColor: 'var(--border-glass)'
   },
   tableHeader: {
     display: 'flex',
@@ -348,7 +348,7 @@ const styles = {
     margin: 0,
     fontSize: '0.95rem',
     fontWeight: '700',
-    color: '#fff'
+    color: 'var(--text-primary)'
   },
   badgeGreen: {
     backgroundColor: 'rgba(16, 185, 129, 0.08)',

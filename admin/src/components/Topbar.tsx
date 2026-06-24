@@ -1,14 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, ChevronDown, Menu, LogOut, User, Settings } from 'lucide-react';
+import { Clock, ChevronDown, Menu, LogOut, User, Settings, Sun, Moon } from 'lucide-react';
 
 interface TopbarProps {
   activeTab: string;
   onToggleSidebar?: () => void;
   currentUser: { name: string; email: string; role: string } | null;
   onLogout: () => void;
+  theme: 'dark' | 'light';
+  toggleTheme: () => void;
 }
 
-export const Topbar: React.FC<TopbarProps> = ({ activeTab, onToggleSidebar, currentUser, onLogout }) => {
+export const Topbar: React.FC<TopbarProps> = ({ 
+  activeTab, 
+  onToggleSidebar, 
+  currentUser, 
+  onLogout,
+  theme,
+  toggleTheme 
+}) => {
   const [time, setTime] = useState(new Date());
   const [showDropdown, setShowDropdown] = useState(false);
 
@@ -62,6 +71,15 @@ export const Topbar: React.FC<TopbarProps> = ({ activeTab, onToggleSidebar, curr
       </div>
 
       <div style={styles.rightSection}>
+        {/* Theme Switcher Button */}
+        <button 
+          className="theme-toggle-btn"
+          onClick={toggleTheme}
+          title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+        >
+          {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+        </button>
+
         {/* Live Clock */}
         <div style={styles.clockContainer}>
           <Clock size={16} color="#f59e0b" />
@@ -84,7 +102,7 @@ export const Topbar: React.FC<TopbarProps> = ({ activeTab, onToggleSidebar, curr
               <span style={styles.userName}>{name}</span>
               <span style={styles.userRole}>{role === 'admin' ? 'Owner / Admin' : 'Staff Member'}</span>
             </div>
-            <ChevronDown size={14} color="#9ca3af" style={{ transform: showDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
+            <ChevronDown size={14} color="var(--text-muted)" style={{ transform: showDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
           </button>
 
           {showDropdown && (
@@ -95,12 +113,12 @@ export const Topbar: React.FC<TopbarProps> = ({ activeTab, onToggleSidebar, curr
               </div>
               
               <button className="dropdown-item" style={{ opacity: 0.6, cursor: 'not-allowed' }} disabled>
-                <User size={16} color="#9ca3af" />
+                <User size={16} color="var(--text-muted)" />
                 <span>My Profile</span>
               </button>
               
               <button className="dropdown-item" style={{ opacity: 0.6, cursor: 'not-allowed' }} disabled>
-                <Settings size={16} color="#9ca3af" />
+                <Settings size={16} color="var(--text-muted)" />
                 <span>Settings</span>
               </button>
               
@@ -125,8 +143,8 @@ export const Topbar: React.FC<TopbarProps> = ({ activeTab, onToggleSidebar, curr
 const styles = {
   topbar: {
     height: '70px',
-    backgroundColor: '#0b0b0e',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'var(--bg-primary)',
+    borderBottom: '1px solid var(--border-glass)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -140,7 +158,7 @@ const styles = {
     margin: 0,
     fontSize: '1.4rem',
     fontWeight: '700',
-    color: '#fff'
+    color: 'var(--text-primary)'
   },
   rightSection: {
     display: 'flex',
@@ -182,10 +200,10 @@ const styles = {
   userName: {
     fontSize: '0.85rem',
     fontWeight: '600',
-    color: '#fff'
+    color: 'var(--text-primary)'
   },
   userRole: {
     fontSize: '0.7rem',
-    color: '#9ca3af'
+    color: 'var(--text-muted)'
   }
 };

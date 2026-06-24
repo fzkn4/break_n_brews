@@ -138,7 +138,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <span style={styles.statLabel}>Low Stock Items</span>
             <span style={{
               ...styles.statValue,
-              color: kpi.low_stock_count > 0 ? '#ef4444' : '#fff'
+              color: kpi.low_stock_count > 0 ? '#ef4444' : 'var(--text-primary)'
             }}>{kpi.low_stock_count} Alerts</span>
             <div style={styles.statTrend}>
               <span style={kpi.low_stock_count > 0 ? styles.trendTextRed : styles.trendTextGreen}>
@@ -291,7 +291,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 border: '1px solid #f59e0b',
                 borderRadius: '8px',
                 padding: '6px 10px',
-                color: '#fff',
+                color: 'var(--text-primary)',
                 fontSize: '0.75rem',
                 pointerEvents: 'none',
                 boxShadow: '0 4px 15px rgba(0,0,0,0.6)',
@@ -391,7 +391,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 border: '1px solid #3b82f6',
                 borderRadius: '8px',
                 padding: '6px 10px',
-                color: '#fff',
+                color: 'var(--text-primary)',
                 fontSize: '0.75rem',
                 pointerEvents: 'none',
                 boxShadow: '0 4px 15px rgba(0,0,0,0.6)',
@@ -414,7 +414,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#3b82f6' }}></span>
-              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '700', color: '#fff' }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '700', color: 'var(--text-primary)' }}>
                 Category Focus: {selectedCategory}
               </h3>
             </div>
@@ -449,7 +449,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     return (
                       <React.Fragment key={ing.id}>
                         <tr>
-                          <td style={{ fontWeight: '600', color: '#fff' }}>{ing.name}</td>
+                          <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{ing.name}</td>
                           <td>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '150px' }}>
                               <div style={{ flex: 1, height: '6px', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '3px', overflow: 'hidden' }}>
@@ -460,7 +460,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                               </span>
                             </div>
                           </td>
-                          <td style={{ fontWeight: '700', color: isLow ? '#ef4444' : '#fff' }}>
+                          <td style={{ fontWeight: '700', color: isLow ? '#ef4444' : 'var(--text-primary)' }}>
                             {ing.stock_level} {ing.unit}
                           </td>
                           <td style={{ color: '#9ca3af' }}>{ing.reorder_point} {ing.unit}</td>
@@ -702,7 +702,7 @@ const styles = {
   statValue: {
     fontSize: '1.4rem',
     fontWeight: '700',
-    color: '#fff',
+    color: 'var(--text-primary)',
     margin: '4px 0'
   },
   statTrend: {
@@ -746,7 +746,7 @@ const styles = {
     margin: '0 0 16px 0',
     fontSize: '1rem',
     fontWeight: '700',
-    color: '#fff',
+    color: 'var(--text-primary)',
     letterSpacing: '0.02em'
   },
   svgContainer: {
@@ -783,7 +783,7 @@ const styles = {
     margin: 0,
     fontSize: '1rem',
     fontWeight: '700',
-    color: '#fff'
+    color: 'var(--text-primary)'
   },
   listContent: {
     display: 'flex',
@@ -824,7 +824,7 @@ const styles = {
   requestIngName: {
     fontWeight: '600',
     fontSize: '0.9rem',
-    color: '#fff'
+    color: 'var(--text-primary)'
   },
   requestQty: {
     fontSize: '0.8rem',
@@ -863,7 +863,7 @@ const styles = {
   lowStockName: {
     fontWeight: '600',
     fontSize: '0.9rem',
-    color: '#fff'
+    color: 'var(--text-primary)'
   },
   lowStockCategory: {
     fontSize: '0.75rem',

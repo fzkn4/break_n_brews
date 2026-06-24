@@ -95,7 +95,7 @@ const styles = {
     alignItems: 'center',
     gap: '12px',
     paddingBottom: '24px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+    borderBottom: '1px solid var(--border-glass)',
     marginBottom: '24px'
   },
   logoImage: {
@@ -112,12 +112,12 @@ const styles = {
     fontWeight: '800',
     fontSize: '1.1rem',
     letterSpacing: '0.05em',
-    color: '#fff'
+    color: 'var(--text-primary)'
   },
   logoSubtitle: {
     fontWeight: '500',
     fontSize: '0.75rem',
-    color: '#9ca3af',
+    color: 'var(--text-muted)',
     letterSpacing: '0.02em',
     marginTop: '2px'
   },
@@ -138,7 +138,7 @@ const styles = {
   footer: {
     marginTop: 'auto',
     paddingTop: '16px',
-    borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+    borderTop: '1px solid var(--border-glass)',
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '4px'
@@ -150,6 +150,6 @@ const styles = {
   },
   footerVersion: {
     fontSize: '0.7rem',
-    color: '#4b5563'
+    color: 'var(--text-dark)'
   }
 };

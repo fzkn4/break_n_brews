@@ -132,7 +132,7 @@ export const ManageRequests: React.FC<ManageRequestsProps> = ({
             ) : (
               filtered.map((req) => (
                 <tr key={req.id}>
-                  <td style={{ fontWeight: '600', color: '#fff' }}>{req.ingredient_name}</td>
+                  <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{req.ingredient_name}</td>
                   <td style={{ fontWeight: '700', color: '#f59e0b' }}>
                     {req.quantity} {req.ingredient_unit}
                   </td>
@@ -218,7 +218,7 @@ export const ManageRequests: React.FC<ManageRequestsProps> = ({
                   required
                 >
                   {ingredients.map(ing => (
-                    <option key={ing.id} value={ing.id} style={{ backgroundColor: '#121217' }}>
+                    <option key={ing.id} value={ing.id} style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
                       {ing.name} (Current: {ing.stock_level} {ing.unit})
                     </option>
                   ))}
@@ -323,13 +323,13 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '16px 20px',
-    borderBottom: '1px solid rgba(255,255,255,0.05)'
+    borderBottom: '1px solid var(--border-glass)'
   },
   modalTitle: {
     margin: 0,
     fontSize: '1.1rem',
     fontWeight: '700',
-    color: '#fff'
+    color: 'var(--text-primary)'
   },
   modalBody: {
     padding: '20px',

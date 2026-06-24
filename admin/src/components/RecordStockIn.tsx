@@ -71,7 +71,7 @@ export const RecordStockIn: React.FC<RecordStockInProps> = ({
               >
                 <option value="" disabled>-- Select an Ingredient --</option>
                 {ingredients.map(ing => (
-                  <option key={ing.id} value={ing.id} style={{ backgroundColor: '#121217' }}>
+                  <option key={ing.id} value={ing.id} style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
                     {ing.name} ({ing.category} | Current: {ing.stock_level} {ing.unit})
                   </option>
                 ))}
@@ -186,7 +186,7 @@ export const RecordStockIn: React.FC<RecordStockInProps> = ({
                           <span>{new Date(log.received_at).toLocaleDateString()}</span>
                         </div>
                       </td>
-                      <td style={{ fontWeight: '600', color: '#fff' }}>{log.ingredient_name}</td>
+                      <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{log.ingredient_name}</td>
                       <td style={{ fontWeight: '700', color: '#10b981' }}>
                         +{log.quantity} {log.ingredient_unit}
                       </td>
@@ -195,7 +195,7 @@ export const RecordStockIn: React.FC<RecordStockInProps> = ({
                       </td>
                       <td>
                         <div style={{ display: 'flex', flexDirection: 'column' as const }}>
-                          <span style={{ fontWeight: '500', color: '#fff' }}>{log.supplier}</span>
+                          <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{log.supplier}</span>
                           {log.invoice_number && (
                             <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
                               Ref: {log.invoice_number}
@@ -250,7 +250,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '4px',
-    borderBottom: '1px solid rgba(255,255,255,0.05)',
+    borderBottom: '1px solid var(--border-glass)',
     paddingBottom: '16px',
     marginBottom: '20px'
   },
@@ -263,7 +263,7 @@ const styles = {
     margin: 0,
     fontSize: '1.05rem',
     fontWeight: '700',
-    color: '#fff'
+    color: 'var(--text-primary)'
   },
   headerDesc: {
     fontSize: '0.75rem',

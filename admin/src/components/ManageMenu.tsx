@@ -239,7 +239,7 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
                     style={{ width: '100%' }}
                   >
                     {categories.map(c => (
-                      <option key={c} value={c} style={{ backgroundColor: '#121217' }}>{c}</option>
+                      <option key={c} value={c} style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>{c}</option>
                     ))}
                   </select>
                 </div>
@@ -358,7 +358,7 @@ const styles = {
     width: '100%',
     height: '150px',
     backgroundColor: 'rgba(255,255,255,0.01)',
-    borderBottom: '1px solid rgba(255,255,255,0.05)',
+    borderBottom: '1px solid var(--border-glass)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center'
@@ -381,7 +381,7 @@ const styles = {
     left: '12px',
     backgroundColor: 'rgba(15, 15, 20, 0.75)',
     backdropFilter: 'blur(4px)',
-    border: '1px solid rgba(255,255,255,0.08)',
+    border: '1px solid var(--border-glass)',
     padding: '3px 8px',
     borderRadius: '4px',
     fontSize: '0.7rem',
@@ -406,7 +406,7 @@ const styles = {
     margin: 0,
     fontSize: '1rem',
     fontWeight: '700',
-    color: '#fff'
+    color: 'var(--text-primary)'
   },
   itemPrice: {
     fontSize: '1.05rem',
@@ -427,13 +427,13 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '16px 20px',
-    borderBottom: '1px solid rgba(255,255,255,0.05)'
+    borderBottom: '1px solid var(--border-glass)'
   },
   modalTitle: {
     margin: 0,
     fontSize: '1.1rem',
     fontWeight: '700',
-    color: '#fff'
+    color: 'var(--text-primary)'
   },
   modalBody: {
     padding: '20px',
