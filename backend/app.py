@@ -310,6 +310,20 @@ def place_order():
     total_amount = Decimal('0.00')
     order_items = []
     
+    # Recipe mapping: menu_item_id -> { ingredient_id -> quantity_per_unit }
+    RECIPES = {
+        1: {1: 0.018, 7: 1},        # Double Espresso: 18g Beans, 1 Cup
+        2: {1: 0.018, 7: 1},        # Americano: 18g Beans, 1 Cup
+        3: {1: 0.018, 2: 0.20, 7: 1, 8: 1}, # Classic Latte: 18g Beans, 200ml Whole Milk, 1 Cup, 1 Straw
+        4: {1: 0.018, 2: 0.15, 7: 1, 8: 1}, # Cappuccino: 18g Beans, 150ml Whole Milk, 1 Cup, 1 Straw
+        5: {1: 0.018, 2: 0.20, 5: 0.02, 7: 1, 8: 1}, # Vanilla Latte: 18g Beans, 200ml Whole Milk, 20ml Vanilla, 1 Cup, 1 Straw
+        6: {1: 0.018, 2: 0.15, 6: 0.02, 7: 1, 8: 1}, # Salted Caramel Macchiato: 18g Beans, 150ml Whole Milk, 20ml Caramel, 1 Cup, 1 Straw
+        7: {3: 0.20, 7: 1, 8: 1},   # Matcha Latte: 200ml Oat Milk, 1 Cup, 1 Straw
+        8: {1: 0.020, 7: 1, 8: 1},  # Cold Brew: 20g Beans, 1 Cup, 1 Straw
+        9: {9: 1},                  # Butter Croissant: 1 Frozen Croissant
+        10: {10: 1}                 # Chocolate Pastry: 1 Frozen Chocolate Croissant
+    }
+    
     for item in items_data:
         menu_item_id = item.get('menu_item_id')
         qty = item.get('quantity', 1)
@@ -326,8 +340,15 @@ def place_order():
             price_at_order=price_snapshot
         ))
 
+        # Deduct ingredients based on recipe
+        recipe = RECIPES.get(menu_item_id, {})
+        for ing_id, req_qty in recipe.items():
+            ing = Ingredient.query.get(ing_id)
+            if ing:
+                ing.stock_level = max(0.0, float(ing.stock_level) - (qty * req_qty))
+
     new_order = Order(
-        status='completed',
+        status=data.get('status', 'completed'),
         total_amount=total_amount,
         items=order_items
     )
@@ -354,7 +375,7 @@ def update_order(id):
     order = Order.query.get_or_404(id)
     data = request.json or {}
     new_status = data.get('status')
-    if new_status not in ['pending', 'completed', 'cancelled']:
+    if new_status not in ['pending', 'preparing', 'completed', 'cancelled']:
         return jsonify({'error': 'Invalid status'}), 400
     
     order.status = new_status

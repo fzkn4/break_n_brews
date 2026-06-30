@@ -17,6 +17,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [menuItems, setMenuItems] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -40,13 +41,15 @@ function App() {
   // Sync data from backend
   const syncStaffPortalData = useCallback(async (showSilentError = false) => {
     try {
-      const [ingRes, ordersRes] = await Promise.all([
+      const [ingRes, ordersRes, menuRes] = await Promise.all([
         fetch(`${API_URL}/ingredients`),
-        fetch(`${API_URL}/orders`)
+        fetch(`${API_URL}/orders`),
+        fetch(`${API_URL}/menu_items`)
       ]);
 
       if (ingRes.ok) setIngredients(await ingRes.json());
       if (ordersRes.ok) setOrders(await ordersRes.json());
+      if (menuRes.ok) setMenuItems(await menuRes.json());
       
       setLoading(false);
     } catch (err) {
@@ -70,8 +73,8 @@ function App() {
     return () => clearInterval(timer);
   }, [syncStaffPortalData]);
 
-  // Update order status (Complete or Cancel)
-  const handleUpdateOrderStatus = async (id: number, status: 'completed' | 'cancelled') => {
+  // Update order status (Preparing, Complete, or Cancel)
+  const handleUpdateOrderStatus = async (id: number, status: 'preparing' | 'completed' | 'cancelled') => {
     try {
       const res = await fetch(`${API_URL}/orders/${id}`, {
         method: 'PUT',
@@ -91,7 +94,57 @@ function App() {
     }
   };
 
-  const pendingOrdersCount = orders.filter(o => o.status === 'pending').length;
+  // Record a POS Sale
+  const handleRecordSale = async (menuItemId: number, quantity: number, serveImmediately: boolean) => {
+    try {
+      const res = await fetch(`${API_URL}/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [{ menu_item_id: menuItemId, quantity }],
+          status: serveImmediately ? 'completed' : 'pending',
+          payment_method: 'cash'
+        })
+      });
+
+      if (res.ok) {
+        showToast(`Sale recorded successfully!`);
+        syncStaffPortalData(true);
+      } else {
+        const err = await res.json();
+        showToast(err.error || 'Failed to record sale', 'error');
+      }
+    } catch (err) {
+      showToast('Network error recording sale', 'error');
+    }
+  };
+
+  // Request an Ingredient from Inventory
+  const handleRequestIngredient = async (ingredientId: number, quantity: number, notes: string) => {
+    try {
+      const res = await fetch(`${API_URL}/requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ingredient_id: ingredientId,
+          quantity,
+          staff_name: currentUser?.name || 'Staff Member',
+          notes
+        })
+      });
+
+      if (res.ok) {
+        showToast('Supply request sent to manager');
+      } else {
+        const err = await res.json();
+        showToast(err.error || 'Failed to send request', 'error');
+      }
+    } catch (err) {
+      showToast('Network error sending request', 'error');
+    }
+  };
+
+  const pendingOrdersCount = orders.filter(o => o.status === 'pending' || o.status === 'preparing').length;
 
   if (!currentUser) {
     return (
@@ -133,7 +186,11 @@ function App() {
         {activeTab === 'orders' && (
           <OrderQueue
             orders={orders}
+            ingredients={ingredients}
+            menuItems={menuItems}
             onUpdateStatus={handleUpdateOrderStatus}
+            onRecordSale={handleRecordSale}
+            onRequestIngredient={handleRequestIngredient}
             loading={loading}
             onRefresh={() => {
               setLoading(true);
