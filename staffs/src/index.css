@@ -23,6 +23,15 @@
   --danger-bg: #fee2e2;
   --info: #3b82f6;
   --info-bg: rgba(59, 130, 246, 0.1);
+
+  /* Order Queue Specific Theme Colors */
+  --card-header-preparing: #e5ba93;
+  --card-header-pending: #a48467;
+  --card-btn-request-bg: #e5ba93;
+  --card-btn-request-text: #ffffff;
+  --card-btn-done: #00cd1b;
+  --card-btn-start: #a48467;
+  --primary-brown: #4a3f35;
   
   --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
