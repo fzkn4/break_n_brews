@@ -370,6 +370,11 @@ def get_orders():
     orders = Order.query.order_by(Order.created_at.desc()).all()
     return jsonify(clean_decimal([order.to_dict() for order in orders]))
 
+@app.route('/api/orders/<int:id>', methods=['GET'])
+def get_order(id):
+    order = Order.query.get_or_404(id)
+    return jsonify(clean_decimal(order.to_dict()))
+
 @app.route('/api/orders/<int:id>', methods=['PUT'])
 def update_order(id):
     order = Order.query.get_or_404(id)
