@@ -74,7 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 const styles = {
   sidebar: {
     width: '260px',
-    height: '100%',
+    height: '100vh',
     backgroundColor: 'var(--sidebar-bg)',
     borderRight: '1px solid var(--sidebar-border)',
     display: 'flex',
