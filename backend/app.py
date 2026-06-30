@@ -344,6 +344,23 @@ def place_order():
 
     return jsonify(clean_decimal(new_order.to_dict())), 201
 
+@app.route('/api/orders', methods=['GET'])
+def get_orders():
+    orders = Order.query.order_by(Order.created_at.desc()).all()
+    return jsonify(clean_decimal([order.to_dict() for order in orders]))
+
+@app.route('/api/orders/<int:id>', methods=['PUT'])
+def update_order(id):
+    order = Order.query.get_or_404(id)
+    data = request.json or {}
+    new_status = data.get('status')
+    if new_status not in ['pending', 'completed', 'cancelled']:
+        return jsonify({'error': 'Invalid status'}), 400
+    
+    order.status = new_status
+    db.session.commit()
+    return jsonify(clean_decimal(order.to_dict()))
+
 # ----------------- ANALYTICS & REPORTS ENDPOINTS -----------------
 
 @app.route('/api/analytics', methods=['GET'])
