@@ -16,6 +16,9 @@ def seed_database():
     staff_admin = Staff(name="Admin User", role="admin", email="admin@breakandbrews.com", phone="+1 (555) 000-0000", is_active=True)
     staff_admin.set_password("password123")
 
+    staff_user = Staff(name="Staff User", role="staff", email="staff@breakandbrews.com", phone="+1 (555) 111-1111", is_active=True)
+    staff_user.set_password("password123")
+
     staff1 = Staff(name="Marcus Aurelius", role="admin", email="marcus@breakandbrews.com", phone="+1 (555) 019-2831", is_active=True)
     staff1.set_password("password123")
     
@@ -28,7 +31,7 @@ def seed_database():
     staff4 = Staff(name="Robert Plan", role="staff", email="robert@breakandbrews.com", phone="+1 (555) 011-2233", is_active=False)
     staff4.set_password("password123")
     
-    db.session.add_all([staff_admin, staff1, staff2, staff3, staff4])
+    db.session.add_all([staff_admin, staff_user, staff1, staff2, staff3, staff4])
     db.session.commit()
 
     # 2. Seed Ingredients
