@@ -38,27 +38,38 @@ The backend runs a REST API on port `5000` to serve table status updates, proces
 
 ---
 
-### 2. Running the Frontend (Vite + React)
+### 2. Running the Frontends (Admin, Staff, Customer)
 
-The frontend dev server hosts the user interface and communicates with the Flask API at regular intervals to keep stats, play timers, and order cards synchronized.
+There are three distinct portal interfaces depending on the user role. To launch any of them:
 
-1. Navigate to the frontend directory:
-   ```bash
-   cd frontend
-   ```
-2. *(Optional)* Install node packages if updating dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the development server:
+1. Navigate to the portal's directory.
+2. Start the Vite development server:
    ```bash
    npm run dev
    ```
-4. Open your browser and navigate to:
-   **[http://localhost:5173](http://localhost:5173)**
+
+- **Admin Portal** (Port 5173): **[http://localhost:5173](http://localhost:5173)**
+- **Staff Portal** (Port 5174): **[http://localhost:5174](http://localhost:5174)**
+- **Customer Portal** (Port 5176): **[http://localhost:5176](http://localhost:5176)**
+
+---
+
+## Seeded Test Accounts
+
+You can log into the Admin and Staff interfaces using the following pre-seeded database accounts:
+
+| Role | Name | Email | Password |
+| :--- | :--- | :--- | :--- |
+| **Admin** | Admin User | `admin@breakandbrews.com` | `password123` |
+| **Admin** | Marcus Aurelius | `marcus@breakandbrews.com` | `password123` |
+| **Staff** | Staff User | `staff@breakandbrews.com` | `password123` |
+| **Staff** | John Doe | `john@breakandbrews.com` | `password123` |
+| **Staff** | Jane Smith | `jane@breakandbrews.com` | `password123` |
 
 ---
 
 ## Project Structure
-- **/backend**: Database models (`models.py`), database seeder (`seed.py`), and REST controllers (`app.py`).
-- **/frontend**: React dashboard SPA. Main dashboard and module pages are located under `/src/components/`. Types are defined in `/src/types.ts`.
+- **/backend**: Flask REST controllers (`app.py`), SQLAlchemy database models (`models.py`), and seeder script (`seed.py`).
+- **/admin**: Vite + React + TS administration dashboard portal.
+- **/staffs**: Vite + React + TS kitchen order queue and inventory requests portal.
+- **/customer**: Vite + React + TS mobile-responsive coffee ordering and live tracker portal.
