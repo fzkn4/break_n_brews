@@ -14,45 +14,47 @@ export const Login: React.FC<LoginProps> = ({ onLogin, theme, toggleTheme }) => 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Seeded accounts info for quick login
-  const accounts = [
-    { name: 'Marcus Aurelius', email: 'marcus@breakandbrews.com', role: 'admin', desc: 'System Administrator / Owner' },
-    { name: 'John Doe', email: 'john@breakandbrews.com', role: 'staff', desc: 'Lead Barista' },
-    { name: 'Jane Smith', email: 'jane@breakandbrews.com', role: 'staff', desc: 'Barista / Inventory' }
-  ];
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
-    setTimeout(() => {
-      const normalizedEmail = email.trim().toLowerCase();
-      if (!normalizedEmail) {
-        setError('Please enter your email address');
-        setLoading(false);
-        return;
-      }
-
-      if (normalizedEmail === 'robert@breakandbrews.com') {
-        setError('This account is currently deactivated. Please contact your manager.');
-        setLoading(false);
-        return;
-      }
-
-      const match = accounts.find(acc => acc.email.toLowerCase() === normalizedEmail);
-      if (match) {
-        onLogin({ name: match.name, email: match.email, role: match.role });
-      } else {
-        // Fallback for custom user email
-        onLogin({
-          name: email.split('@')[0] || 'Guest User',
-          email: normalizedEmail,
-          role: 'staff'
-        });
-      }
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError('Please enter your email address');
       setLoading(false);
-    }, 800);
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:5000/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          password: password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        onLogin({
+          name: data.name,
+          email: data.email,
+          role: data.role,
+        });
+      } else {
+        setError(data.error || 'Authentication failed');
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('Connection to authentication server failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

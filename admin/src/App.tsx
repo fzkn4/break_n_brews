@@ -16,10 +16,7 @@ const API_URL = 'http://localhost:5000/api';
 function App() {
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string; role: string } | null>(() => {
     const saved = localStorage.getItem('bb_admin_user');
-    if (saved) return JSON.parse(saved);
-    const defaultUser = { name: 'Marcus Aurelius', email: 'marcus@breakandbrews.com', role: 'admin' };
-    localStorage.setItem('bb_admin_user', JSON.stringify(defaultUser));
-    return defaultUser;
+    return saved ? JSON.parse(saved) : null;
   });
 
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
