@@ -71,7 +71,7 @@ function App() {
   };
 
   // Sync all core database lists
-  const syncInventoryData = async () => {
+  const syncInventoryData = async (silent = false) => {
     try {
       const [ingRes, menuRes, reqRes, stockRes, analyticsRes] = await Promise.all([
         fetch(`${API_URL}/ingredients`),
@@ -90,7 +90,9 @@ function App() {
       setLoading(false);
     } catch (err) {
       console.error('Failed to sync system parameters:', err);
-      showToast('Error syncing system parameters', 'error');
+      if (!silent) {
+        showToast('Error syncing system parameters', 'error');
+      }
     }
   };
 
@@ -112,16 +114,11 @@ function App() {
     fetchAnalytics();
   }, [analyticsDays]);
 
-  // Periodic polling for real-time dashboard alerts every 7 seconds
+  // Periodic polling for real-time dashboard alerts and request lists every 5 seconds
   useEffect(() => {
     const pollTimer = setInterval(async () => {
-      try {
-        const analyticsRes = await fetch(`${API_URL}/analytics?days=${analyticsDays}`);
-        if (analyticsRes.ok) setAnalyticsData(await analyticsRes.json());
-      } catch (err) {
-        console.error('Failed to sync live state:', err);
-      }
-    }, 7000);
+      syncInventoryData(true);
+    }, 5000);
     return () => clearInterval(pollTimer);
   }, [analyticsDays]);
 

@@ -136,6 +136,14 @@ function App() {
     }
   }, [activeOrderId, fetchActiveOrderStatus]);
 
+  // Periodic menu sync every 10 seconds silently
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchMenu();
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [fetchMenu]);
+
   // Handle Favorites Toggle
   const toggleFavorite = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -297,7 +305,7 @@ function App() {
               HOME
             </button>
             <button 
-              onClick={() => { setActiveView('menu'); setSelectedCategory('All'); }} 
+              onClick={() => { setActiveView('menu'); setSelectedCategory('All'); fetchMenu(); }} 
               style={{...styles.navLink, ...(activeView === 'menu' ? styles.navLinkActive : {})}}
             >
               ORDER MENU
@@ -337,13 +345,13 @@ function App() {
                   <p style={styles.heroDesc}>"Take a break. Enjoy your brew."</p>
                   <div style={styles.heroBtnGroup}>
                     <button 
-                      onClick={() => { setActiveView('menu'); setSelectedCategory('All'); }} 
+                      onClick={() => { setActiveView('menu'); setSelectedCategory('All'); fetchMenu(); }} 
                       className="btn btn-white"
                     >
                       Order Now
                     </button>
                     <button 
-                      onClick={() => { setActiveView('menu'); setSelectedCategory('All'); }} 
+                      onClick={() => { setActiveView('menu'); setSelectedCategory('All'); fetchMenu(); }} 
                       className="btn btn-outline-white"
                     >
                       Our Menu
@@ -413,7 +421,7 @@ function App() {
               <div style={styles.midBannerContent}>
                 <h2 style={styles.bannerTitle}>Check Out Our Best Coffee</h2>
                 <button 
-                  onClick={() => { setActiveView('menu'); setSelectedCategory('All'); }} 
+                  onClick={() => { setActiveView('menu'); setSelectedCategory('All'); fetchMenu(); }} 
                   className="btn btn-white" 
                   style={{ marginTop: '16px' }}
                 >
@@ -700,6 +708,7 @@ function App() {
                       setActiveOrderId(null);
                       localStorage.removeItem('bb_active_order_id');
                       setActiveView('menu');
+                      fetchMenu();
                     }}
                     className="btn btn-primary"
                     style={{ justifyContent: 'center' }}
