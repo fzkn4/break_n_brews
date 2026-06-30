@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Coffee, Key, Mail, Eye, EyeOff, AlertTriangle, Sun, Moon } from 'lucide-react';
+import { Key, Mail, Eye, EyeOff, AlertTriangle, Sun, Moon } from 'lucide-react';
 
 interface LoginProps {
   onLogin: (user: { name: string; email: string; role: string }) => void;

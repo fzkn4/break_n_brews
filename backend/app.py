@@ -323,7 +323,19 @@ def place_order():
         9: {9: 1},                  # Butter Croissant: 1 Frozen Croissant
         10: {10: 1}                 # Chocolate Pastry: 1 Frozen Chocolate Croissant
     }
-    
+    # For customer orders (pending status), check ingredient stock levels first
+    if data.get('status') == 'pending':
+        for item in items_data:
+            menu_item_id = item.get('menu_item_id')
+            qty = item.get('quantity', 1)
+            menu_item = MenuItem.query.get(menu_item_id)
+            if menu_item:
+                recipe = RECIPES.get(menu_item_id, {})
+                for ing_id, req_qty in recipe.items():
+                    ing = Ingredient.query.get(ing_id)
+                    if ing and float(ing.stock_level) < (qty * req_qty):
+                        return jsonify({'error': f'Sorry, {menu_item.name} is temporarily out of stock due to shortage of {ing.name}.'}), 400
+
     for item in items_data:
         menu_item_id = item.get('menu_item_id')
         qty = item.get('quantity', 1)
@@ -369,6 +381,11 @@ def place_order():
 def get_orders():
     orders = Order.query.order_by(Order.created_at.desc()).all()
     return jsonify(clean_decimal([order.to_dict() for order in orders]))
+
+@app.route('/api/orders/<int:id>', methods=['GET'])
+def get_order(id):
+    order = Order.query.get_or_404(id)
+    return jsonify(clean_decimal(order.to_dict()))
 
 @app.route('/api/orders/<int:id>', methods=['PUT'])
 def update_order(id):
