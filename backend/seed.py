@@ -13,13 +13,22 @@ def seed_database():
     print("Seeding database with coffee shop inventory data...")
 
     # 1. Seed Staff
-    staff_members = [
-        Staff(name="Marcus Aurelius", role="admin", email="marcus@breakandbrews.com", phone="+1 (555) 019-2831", is_active=True),
-        Staff(name="John Doe", role="staff", email="john@breakandbrews.com", phone="+1 (555) 014-9988", is_active=True),
-        Staff(name="Jane Smith", role="staff", email="jane@breakandbrews.com", phone="+1 (555) 012-7744", is_active=True),
-        Staff(name="Robert Plan", role="staff", email="robert@breakandbrews.com", phone="+1 (555) 011-2233", is_active=False)
-    ]
-    db.session.add_all(staff_members)
+    staff_admin = Staff(name="Admin User", role="admin", email="admin@breakandbrews.com", phone="+1 (555) 000-0000", is_active=True)
+    staff_admin.set_password("password123")
+
+    staff1 = Staff(name="Marcus Aurelius", role="admin", email="marcus@breakandbrews.com", phone="+1 (555) 019-2831", is_active=True)
+    staff1.set_password("password123")
+    
+    staff2 = Staff(name="John Doe", role="staff", email="john@breakandbrews.com", phone="+1 (555) 014-9988", is_active=True)
+    staff2.set_password("password123")
+    
+    staff3 = Staff(name="Jane Smith", role="staff", email="jane@breakandbrews.com", phone="+1 (555) 012-7744", is_active=True)
+    staff3.set_password("password123")
+    
+    staff4 = Staff(name="Robert Plan", role="staff", email="robert@breakandbrews.com", phone="+1 (555) 011-2233", is_active=False)
+    staff4.set_password("password123")
+    
+    db.session.add_all([staff_admin, staff1, staff2, staff3, staff4])
     db.session.commit()
 
     # 2. Seed Ingredients

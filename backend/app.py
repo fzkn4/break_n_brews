@@ -248,6 +248,30 @@ def manage_stockin():
 
 # ----------------- STAFF ROSTER ENDPOINTS -----------------
 
+@app.route('/api/login', methods=['POST'])
+def login():
+    data = request.json or {}
+    email = data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        return jsonify({'error': 'Missing email or password'}), 400
+
+    # Find staff by email (case-insensitive)
+    staff = Staff.query.filter(db.func.lower(Staff.email) == email.lower().strip()).first()
+
+    if not staff or not staff.check_password(password):
+        return jsonify({'error': 'Invalid email or password'}), 401
+
+    if not staff.is_active:
+        return jsonify({'error': 'This account is currently deactivated. Please contact your manager.'}), 403
+
+    return jsonify({
+        'name': staff.name,
+        'email': staff.email,
+        'role': staff.role
+    }), 200
+
 @app.route('/api/staff', methods=['GET', 'POST'])
 def manage_staff():
     if request.method == 'POST':
@@ -262,6 +286,11 @@ def manage_staff():
             phone=data.get('phone'),
             is_active=data.get('is_active', True)
         )
+        if 'password' in data and data['password']:
+            new_s.set_password(data['password'])
+        else:
+            new_s.set_password('password123')
+
         db.session.add(new_s)
         db.session.commit()
         return jsonify(clean_decimal(new_s.to_dict())), 201
