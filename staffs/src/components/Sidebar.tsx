@@ -1,11 +1,13 @@
 import React from 'react';
-import { LayoutDashboard, Package, LogOut } from 'lucide-react';
+import { LayoutDashboard, Package, LogOut, Sun, Moon } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   onLogout: () => void;
   pendingOrdersCount: number;
+  theme: 'dark' | 'light';
+  toggleTheme: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -13,6 +15,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   onLogout,
   pendingOrdersCount,
+  theme,
+  toggleTheme,
 }) => {
   const menuItems = [
     { id: 'dashboard', label: 'DASHBOARD', icon: LayoutDashboard },
@@ -56,6 +60,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       <div style={styles.footer}>
+        <button
+          onClick={toggleTheme}
+          className="sidebar-nav-btn"
+          style={{ ...styles.navBtn, marginBottom: '12px', width: '100%' }}
+        >
+          <div className="btn-content" style={styles.btnContent}>
+            {theme === 'light' ? (
+              <>
+                <Moon size={20} color="var(--text-muted)" />
+                <span>DARK MODE</span>
+              </>
+            ) : (
+              <>
+                <Sun size={20} color="var(--text-muted)" />
+                <span>LIGHT MODE</span>
+              </>
+            )}
+          </div>
+        </button>
+
         <button
           onClick={onLogout}
           className="sidebar-nav-btn"
@@ -108,7 +132,7 @@ const styles = {
     margin: 0,
     fontSize: '1.8rem',
     fontWeight: '800',
-    color: '#4a3f35',
+    color: 'var(--text-primary)',
     letterSpacing: '3px',
     textTransform: 'uppercase' as const,
   },

@@ -688,7 +688,7 @@ const styles = {
     overflow: 'hidden',
     border: '1px solid var(--sidebar-border)',
     boxShadow: '0 8px 24px rgba(139, 90, 43, 0.05)',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--card-bg)',
     borderRadius: '20px'
   },
   cardHeaderPreparing: {
@@ -843,7 +843,7 @@ const styles = {
     marginTop: '20px'
   },
   controlBtn: {
-    background: '#fff',
+    background: 'var(--card-bg)',
     border: '1px solid var(--sidebar-border)',
     color: 'var(--primary-brown)',
     width: '36px',
@@ -922,8 +922,8 @@ const styles = {
     padding: '12px 16px',
     borderRadius: '12px',
     border: '1.5px solid var(--sidebar-border)',
-    backgroundColor: '#fff',
-    color: 'var(--primary-brown)',
+    backgroundColor: 'var(--card-bg)',
+    color: 'var(--text-primary)',
     fontSize: '0.95rem',
     fontWeight: '500',
     outline: 'none',
@@ -935,8 +935,8 @@ const styles = {
     padding: '12px 16px',
     borderRadius: '12px',
     border: '1.5px solid var(--sidebar-border)',
-    backgroundColor: '#fff',
-    color: 'var(--primary-brown)',
+    backgroundColor: 'var(--card-bg)',
+    color: 'var(--text-primary)',
     fontSize: '0.95rem',
     fontWeight: '500',
     outline: 'none',
@@ -1068,7 +1068,7 @@ const styles = {
   modalContent: {
     width: '100%',
     maxWidth: '460px',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--card-bg)',
     borderRadius: '16px',
     overflow: 'hidden',
     boxShadow: '0 20px 40px rgba(139, 90, 43, 0.15)',
@@ -1103,10 +1103,10 @@ const styles = {
   textarea: {
     width: '100%',
     padding: '12px 16px',
-    borderRadius: '8px',
+    borderRadius: '12px',
     border: '1.5px solid var(--sidebar-border)',
-    backgroundColor: '#fff',
-    color: 'var(--primary-brown)',
+    backgroundColor: 'var(--card-bg)',
+    color: 'var(--text-primary)',
     fontSize: '0.95rem',
     fontWeight: '500',
     outline: 'none',
