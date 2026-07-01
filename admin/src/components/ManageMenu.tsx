@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Plus, Edit2, Trash2, X, Eye, EyeOff, Filter, Coffee } from 'lucide-react';
-import type { MenuItem } from '../types';
+import type { MenuItem, Ingredient } from '../types';
 
 interface ManageMenuProps {
   menuItems: MenuItem[];
+  ingredients: Ingredient[];
   onCreateMenuItem: (data: any) => void;
   onUpdateMenuItem: (id: number, data: any) => void;
   onDeleteMenuItem: (id: number) => void;
@@ -11,6 +12,7 @@ interface ManageMenuProps {
 
 export const ManageMenu: React.FC<ManageMenuProps> = ({
   menuItems,
+  ingredients,
   onCreateMenuItem,
   onUpdateMenuItem,
   onDeleteMenuItem
@@ -27,13 +29,21 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
   const [price, setPrice] = useState('0.00');
   const [isAvailable, setIsAvailable] = useState(true);
   const [imageUrl, setImageUrl] = useState('');
+  const [selectedIngredients, setSelectedIngredients] = useState<{
+    ingredient_id: number;
+    default_quantity: number;
+    is_customizable: boolean;
+  }[]>([]);
+  const [newIngredientId, setNewIngredientId] = useState<number | ''>('');
 
   const categories = [
     'Coffee',
-    'Specialty',
-    'Tea',
-    'Pastries',
-    'Merchandise'
+    'iced coffee',
+    'food and snacks',
+    'alcoholic drinks',
+    'platter',
+    'rice bowl',
+    'rice meals'
   ];
 
   const startAdd = () => {
@@ -43,6 +53,8 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
     setPrice('3.50');
     setIsAvailable(true);
     setImageUrl('');
+    setSelectedIngredients([]);
+    setNewIngredientId('');
     setShowModal(true);
   };
 
@@ -53,7 +65,45 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
     setPrice(item.price.toString());
     setIsAvailable(item.is_available);
     setImageUrl(item.image_url || '');
+    setSelectedIngredients(
+      item.ingredients
+        ? item.ingredients.map(ing => ({
+            ingredient_id: ing.ingredient_id,
+            default_quantity: ing.default_quantity,
+            is_customizable: ing.is_customizable
+          }))
+        : []
+    );
+    setNewIngredientId('');
     setShowModal(true);
+  };
+
+  const addIngredientToRecipe = () => {
+    if (newIngredientId === '') return;
+    const ingId = Number(newIngredientId);
+    if (selectedIngredients.some(i => i.ingredient_id === ingId)) return;
+
+    const dbIng = ingredients.find(i => i.id === ingId);
+    if (!dbIng) return;
+
+    setSelectedIngredients(prev => [
+      ...prev,
+      { ingredient_id: ingId, default_quantity: 0.1, is_customizable: false }
+    ]);
+    setNewIngredientId('');
+  };
+
+  const removeIngredientFromRecipe = (ingId: number) => {
+    setSelectedIngredients(prev => prev.filter(i => i.ingredient_id !== ingId));
+  };
+
+  const updateRecipeIngredient = (ingId: number, field: 'default_quantity' | 'is_customizable', value: any) => {
+    setSelectedIngredients(prev => prev.map(i => {
+      if (i.ingredient_id === ingId) {
+        return { ...i, [field]: value };
+      }
+      return i;
+    }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -63,7 +113,8 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
       category,
       price: parseFloat(price) || 0,
       is_available: isAvailable,
-      image_url: imageUrl || null
+      image_url: imageUrl || null,
+      ingredients: selectedIngredients
     };
 
     if (editItem) {
@@ -83,7 +134,7 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
 
   // Filters
   const filtered = menuItems.filter((item) => {
-    const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter;
+    const matchesCategory = categoryFilter === 'all' || item.category.toLowerCase() === categoryFilter.toLowerCase();
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
   });
@@ -164,6 +215,13 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
                   <h4 style={styles.itemName}>{item.name}</h4>
                   <span style={styles.itemPrice}>${item.price.toFixed(2)}</span>
                 </div>
+
+                {item.ingredients && item.ingredients.length > 0 && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-8px' }}>
+                    <span style={{ fontWeight: 'bold' }}>Ingredients:</span>{' '}
+                    {item.ingredients.map(i => `${i.name} (${i.default_quantity}${i.unit}${i.is_customizable ? '*' : ''})`).join(', ')}
+                  </div>
+                )}
 
                 <div style={styles.cardActions}>
                   <button 
@@ -272,6 +330,82 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
                   onChange={(e) => setImageUrl(e.target.value)}
                   style={{ width: '100%', boxSizing: 'border-box' }}
                 />
+              </div>
+
+              {/* Recipe Ingredients Configuration Section */}
+              <div style={{ ...styles.inputGroup, borderTop: '1px solid var(--border-glass)', paddingTop: '16px', marginTop: '8px' }}>
+                <label style={{ ...styles.label, color: 'var(--text-primary)', fontSize: '0.9rem', marginBottom: '8px' }}>Recipe Ingredients</label>
+                
+                {selectedIngredients.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                    {selectedIngredients.map((recipeItem) => {
+                      const ing = ingredients.find(i => i.id === recipeItem.ingredient_id);
+                      if (!ing) return null;
+                      return (
+                        <div key={recipeItem.ingredient_id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ flex: 2, fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{ing.name} ({ing.unit})</span>
+                          <input
+                            type="number"
+                            step="0.001"
+                            min="0"
+                            className="glass-input"
+                            placeholder="Qty"
+                            value={recipeItem.default_quantity}
+                            onChange={(e) => updateRecipeIngredient(recipeItem.ingredient_id, 'default_quantity', parseFloat(e.target.value) || 0)}
+                            style={{ flex: 1, padding: '4px 8px', fontSize: '0.85rem' }}
+                            required
+                          />
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', cursor: 'pointer', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                            <input
+                              type="checkbox"
+                              checked={recipeItem.is_customizable}
+                              onChange={(e) => updateRecipeIngredient(recipeItem.ingredient_id, 'is_customizable', e.target.checked)}
+                              style={{ cursor: 'pointer' }}
+                            />
+                            Cust
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => removeIngredientFromRecipe(recipeItem.ingredient_id)}
+                            className="menu-btn-delete"
+                            style={{ padding: '6px' }}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 12px 0' }}>No ingredients associated with this menu item recipe.</p>
+                )}
+
+                {/* Add new ingredient dropdown */}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <select
+                    className="glass-input"
+                    value={newIngredientId}
+                    onChange={(e) => setNewIngredientId(e.target.value === '' ? '' : Number(e.target.value))}
+                    style={{ flex: 1, padding: '6px', fontSize: '0.85rem' }}
+                  >
+                    <option value="">Select ingredient to add...</option>
+                    {ingredients
+                      .filter(ing => !selectedIngredients.some(si => si.ingredient_id === ing.id))
+                      .map(ing => (
+                        <option key={ing.id} value={ing.id} style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                          {ing.name} ({ing.unit})
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={addIngredientToRecipe}
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: '0.85rem' }}
+                  >
+                    Add
+                  </button>
+                </div>
               </div>
 
               <div style={{ ...styles.inputGroup, flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
@@ -426,7 +560,7 @@ const styles = {
     marginTop: '4px'
   },
   modalContent: {
-    maxWidth: '480px'
+    maxWidth: '560px'
   },
   modalHeader: {
     display: 'flex',

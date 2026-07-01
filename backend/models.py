@@ -73,6 +73,7 @@ class MenuItem(db.Model):
 
     # Relationships
     order_items = db.relationship('OrderItem', back_populates='menu_item', cascade='all, delete-orphan')
+    ingredients = db.relationship('MenuItemIngredient', backref='menu_item', lazy=True, cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -82,8 +83,27 @@ class MenuItem(db.Model):
             'price': float(self.price),
             'is_available': self.is_available,
             'image_url': self.image_url,
-            'created_at': self.created_at.isoformat()
+            'created_at': self.created_at.isoformat(),
+            'ingredients': [
+                {
+                    'ingredient_id': mi.ingredient_id,
+                    'name': mi.ingredient.name,
+                    'unit': mi.ingredient.unit,
+                    'default_quantity': mi.default_quantity,
+                    'is_customizable': mi.is_customizable
+                } for mi in self.ingredients
+            ]
         }
+
+class MenuItemIngredient(db.Model):
+    __tablename__ = 'menu_item_ingredients'
+    menu_item_id = db.Column(db.Integer, db.ForeignKey('menu_items.id', ondelete='CASCADE'), primary_key=True)
+    ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredients.id', ondelete='CASCADE'), primary_key=True)
+    default_quantity = db.Column(db.Float, nullable=False, default=0.0)
+    is_customizable = db.Column(db.Boolean, default=False, nullable=False)
+
+    # Relationships
+    ingredient = db.relationship('Ingredient')
 
 class IngredientRequest(db.Model):
     __tablename__ = 'ingredient_requests'
@@ -157,11 +177,19 @@ class OrderItem(db.Model):
     menu_item_id = db.Column(db.Integer, db.ForeignKey('menu_items.id'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False, default=1)
     price_at_order = db.Column(db.Numeric(10, 2), nullable=False)
+    customizations = db.Column(db.Text, nullable=True)
 
     # Relationships
     menu_item = db.relationship('MenuItem', back_populates='order_items')
 
     def to_dict(self):
+        import json
+        customs = []
+        if self.customizations:
+            try:
+                customs = json.loads(self.customizations)
+            except Exception:
+                customs = []
         return {
             'id': self.id,
             'order_id': self.order_id,
@@ -169,7 +197,8 @@ class OrderItem(db.Model):
             'menu_item_name': self.menu_item.name if self.menu_item else None,
             'quantity': self.quantity,
             'price_at_order': float(self.price_at_order),
-            'subtotal': float(self.price_at_order * self.quantity)
+            'subtotal': float(self.price_at_order * self.quantity),
+            'customizations': customs
         }
 
 class Transaction(db.Model):
