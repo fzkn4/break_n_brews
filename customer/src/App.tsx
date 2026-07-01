@@ -11,7 +11,10 @@ import {
   Clock, 
   AlertCircle,
   Star,
-  Sparkles
+  Sparkles,
+  CupSoda,
+  Leaf,
+  Cookie
 } from 'lucide-react';
 import './index.css';
 
@@ -274,9 +277,9 @@ function App() {
   const categories = [
     { name: 'All', icon: Sparkles },
     { name: 'Coffee', icon: Coffee },
-    { name: 'Specialty', icon: Coffee },
-    { name: 'Tea', icon: Coffee },
-    { name: 'Pastries', icon: Coffee }
+    { name: 'Specialty', icon: CupSoda },
+    { name: 'Tea', icon: Leaf },
+    { name: 'Pastries', icon: Cookie }
   ];
 
   // Filtered Menu Items
