@@ -91,7 +91,7 @@ function App() {
   // Fetch Menu Items
   const fetchMenu = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/menu_items`);
+      const res = await fetch(`${API_URL}/menu`);
       if (res.ok) {
         const data = await res.json();
         setMenuItems(data.filter((item: any) => item.is_available));
