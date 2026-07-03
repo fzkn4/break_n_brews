@@ -17,6 +17,13 @@ export interface MenuItem {
   is_available: boolean;
   image_url: string | null;
   created_at: string;
+  ingredients?: {
+    ingredient_id: number;
+    name: string;
+    unit: string;
+    default_quantity: number;
+    is_customizable: boolean;
+  }[];
 }
 
 export interface IngredientRequest {

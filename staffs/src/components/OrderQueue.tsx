@@ -24,59 +24,7 @@ interface OrderQueueProps {
   onRefresh: () => void;
 }
 
-// Client-side recipe mapping for ingredient impact display
-const RECIPES: Record<number, { ingId: number; name: string; qty: number; unit: string }[]> = {
-  1: [ // Double Espresso
-    { ingId: 1, name: 'Espresso Roast Beans', qty: 0.018, unit: 'kg' },
-    { ingId: 7, name: '12oz To-Go Cups', qty: 1, unit: 'pcs' }
-  ],
-  2: [ // Caffè Americano
-    { ingId: 1, name: 'Espresso Roast Beans', qty: 0.018, unit: 'kg' },
-    { ingId: 7, name: '12oz To-Go Cups', qty: 1, unit: 'pcs' }
-  ],
-  3: [ // Classic Latte
-    { ingId: 1, name: 'Espresso Roast Beans', qty: 0.018, unit: 'kg' },
-    { ingId: 2, name: 'Whole Milk', qty: 0.20, unit: 'L' },
-    { ingId: 7, name: '12oz To-Go Cups', qty: 1, unit: 'pcs' },
-    { ingId: 8, name: 'Paper Straws', qty: 1, unit: 'pcs' }
-  ],
-  4: [ // Cappuccino
-    { ingId: 1, name: 'Espresso Roast Beans', qty: 0.018, unit: 'kg' },
-    { ingId: 2, name: 'Whole Milk', qty: 0.15, unit: 'L' },
-    { ingId: 7, name: '12oz To-Go Cups', qty: 1, unit: 'pcs' },
-    { ingId: 8, name: 'Paper Straws', qty: 1, unit: 'pcs' }
-  ],
-  5: [ // Vanilla Latte
-    { ingId: 1, name: 'Espresso Roast Beans', qty: 0.018, unit: 'kg' },
-    { ingId: 2, name: 'Whole Milk', qty: 0.20, unit: 'L' },
-    { ingId: 5, name: 'Vanilla Syrup', qty: 0.02, unit: 'L' },
-    { ingId: 7, name: '12oz To-Go Cups', qty: 1, unit: 'pcs' },
-    { ingId: 8, name: 'Paper Straws', qty: 1, unit: 'pcs' }
-  ],
-  6: [ // Salted Caramel Macchiato
-    { ingId: 1, name: 'Espresso Roast Beans', qty: 0.018, unit: 'kg' },
-    { ingId: 2, name: 'Whole Milk', qty: 0.15, unit: 'L' },
-    { ingId: 6, name: 'Caramel Sauce', qty: 0.02, unit: 'L' },
-    { ingId: 7, name: '12oz To-Go Cups', qty: 1, unit: 'pcs' },
-    { ingId: 8, name: 'Paper Straws', qty: 1, unit: 'pcs' }
-  ],
-  7: [ // Matcha Latte
-    { ingId: 3, name: 'Oat Milk', qty: 0.20, unit: 'L' },
-    { ingId: 7, name: '12oz To-Go Cups', qty: 1, unit: 'pcs' },
-    { ingId: 8, name: 'Paper Straws', qty: 1, unit: 'pcs' }
-  ],
-  8: [ // Cold Brew
-    { ingId: 1, name: 'Espresso Roast Beans', qty: 0.020, unit: 'kg' },
-    { ingId: 7, name: '12oz To-Go Cups', qty: 1, unit: 'pcs' },
-    { ingId: 8, name: 'Paper Straws', qty: 1, unit: 'pcs' }
-  ],
-  9: [ // Butter Croissant
-    { ingId: 9, name: 'Butter Croissants (Frozen)', qty: 1, unit: 'pcs' }
-  ],
-  10: [ // Chocolate Pastry
-    { ingId: 10, name: 'Chocolate Croissants (Frozen)', qty: 1, unit: 'pcs' }
-  ]
-};
+
 
 export const OrderQueue: React.FC<OrderQueueProps> = ({
   orders,
@@ -142,13 +90,14 @@ export const OrderQueue: React.FC<OrderQueueProps> = ({
   const getIngredientImpacts = () => {
     if (selectedProductId === '') return { impacts: [], isInsufficient: false };
 
-    const recipe = RECIPES[Number(selectedProductId)] || [];
+    const selectedItem = menuItems.find(item => item.id === Number(selectedProductId));
+    const recipe = selectedItem?.ingredients || [];
     let isInsufficient = false;
 
-    const impacts = recipe.map(req => {
-      const dbIng = ingredients.find(i => i.id === req.ingId);
+    const impacts = recipe.map((req: any) => {
+      const dbIng = ingredients.find(i => i.id === req.ingredient_id);
       const currentStock = dbIng ? dbIng.stock_level : 0;
-      const totalNeeded = req.qty * quantitySold;
+      const totalNeeded = req.default_quantity * quantitySold;
       const projectedStock = Math.max(0, currentStock - totalNeeded);
       const insufficient = currentStock < totalNeeded;
 
@@ -157,7 +106,10 @@ export const OrderQueue: React.FC<OrderQueueProps> = ({
       }
 
       return {
-        ...req,
+        ingId: req.ingredient_id,
+        name: req.name,
+        qty: req.default_quantity,
+        unit: req.unit,
         currentStock,
         totalNeeded,
         projectedStock,
@@ -182,8 +134,20 @@ export const OrderQueue: React.FC<OrderQueueProps> = ({
 
   // Helper to format order items string
   const getOrderItemsString = (order: Order) => {
-    if (!order.items || order.items.length === 0) return 'No customizations';
-    return order.items.map(i => `+ ${i.quantity}x ${i.menu_item_name || 'Item'}`).join(', ');
+    if (!order.items || order.items.length === 0) return 'No items';
+    return order.items.map(i => {
+      let label = `${i.quantity}x ${i.menu_item_name || 'Item'}`;
+      if (i.customizations) {
+        try {
+          const parsed = typeof i.customizations === 'string' ? JSON.parse(i.customizations) : i.customizations;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const custStrs = parsed.map((c: any) => `${c.name}: ${c.level}`).join(', ');
+            label += ` (${custStrs})`;
+          }
+        } catch(e) {}
+      }
+      return label;
+    }).join(' | ');
   };
 
   return (
@@ -250,8 +214,9 @@ export const OrderQueue: React.FC<OrderQueueProps> = ({
                     <button 
                       onClick={() => {
                         const firstItem = order.items?.[0];
-                        const recipe = firstItem ? RECIPES[firstItem.menu_item_id] : null;
-                        const primaryIngId = recipe?.[0]?.ingId;
+                        const menuItem = firstItem ? menuItems.find(mi => mi.id === firstItem.menu_item_id) : null;
+                        const recipe = menuItem?.ingredients || [];
+                        const primaryIngId = recipe?.[0]?.ingredient_id;
                         openRequestModal(primaryIngId);
                       }} 
                       className="btn" 

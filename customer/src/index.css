@@ -192,7 +192,7 @@ input, select, textarea {
   background-color: var(--accent-light);
   display: flex;
   align-items: center;
-  justifyContent: center;
+  justify-content: center;
   transition: var(--transition-smooth);
 }
 

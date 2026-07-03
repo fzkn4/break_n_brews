@@ -404,6 +404,7 @@ function App() {
         {activeTab === 'menu' && (
           <ManageMenu 
             menuItems={menuItems} 
+            ingredients={ingredients}
             onCreateMenuItem={handleCreateMenuItem}
             onUpdateMenuItem={handleUpdateMenuItem}
             onDeleteMenuItem={handleDeleteMenuItem}

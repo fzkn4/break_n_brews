@@ -34,17 +34,19 @@ const PRODUCT_IMAGES: Record<number, string> = {
 // Default fallback image for newly added items
 const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=600&auto=format&fit=crop&q=80';
 
+interface CartItemCustomization {
+  ingredient_id: number;
+  name: string;
+  level: string;
+}
+
 interface CartItem {
   id: string; // unique cart item id (due to customizations)
   menuItemId: number;
   name: string;
   price: number;
   quantity: number;
-  customizations: {
-    milk: string;
-    sugar: string;
-    ice: string;
-  };
+  customizations: CartItemCustomization[];
 }
 
 function App() {
@@ -63,9 +65,7 @@ function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
   const [customQty, setCustomQty] = useState<number>(1);
-  const [customMilk, setCustomMilk] = useState<string>('Whole Milk');
-  const [customSugar, setCustomSugar] = useState<string>('Regular');
-  const [customIce, setCustomIce] = useState<string>('Regular');
+  const [selectedProductCustomizations, setSelectedProductCustomizations] = useState<Record<number, string>>({});
 
   // Checkout Form States
   const [customerName, setCustomerName] = useState<string>('');
@@ -157,27 +157,44 @@ function App() {
   const openCustomizationModal = (product: any) => {
     setSelectedProduct(product);
     setCustomQty(1);
-    setCustomMilk('Whole Milk');
-    setCustomSugar('Regular');
-    setCustomIce('Regular');
+    const initialCusts: Record<number, string> = {};
+    if (product.ingredients) {
+      product.ingredients.forEach((ing: any) => {
+        if (ing.is_customizable) {
+          initialCusts[ing.ingredient_id] = 'Regular';
+        }
+      });
+    }
+    setSelectedProductCustomizations(initialCusts);
   };
 
   // Calculate customized price
   const getCustomizedPrice = () => {
     if (!selectedProduct) return 0;
-    let price = selectedProduct.price;
-    if (customMilk === 'Oat Milk' || customMilk === 'Soy Milk') {
-      price += 0.50; // extra charge for premium milk
-    }
-    return price * customQty;
+    return selectedProduct.price * customQty;
   };
 
   // Add Item to Cart
   const handleAddToCart = () => {
     if (!selectedProduct) return;
     
-    const cartItemId = `${selectedProduct.id}-${customMilk}-${customSugar}-${customIce}`;
-    const itemPrice = selectedProduct.price + (customMilk === 'Oat Milk' || customMilk === 'Soy Milk' ? 0.50 : 0);
+    const customizationsArray: CartItemCustomization[] = [];
+    if (selectedProduct.ingredients) {
+      selectedProduct.ingredients.forEach((ing: any) => {
+        if (ing.is_customizable) {
+          const level = selectedProductCustomizations[ing.ingredient_id] || 'Regular';
+          customizationsArray.push({
+            ingredient_id: ing.ingredient_id,
+            name: ing.name,
+            level: level
+          });
+        }
+      });
+    }
+
+    const custKey = customizationsArray.map(c => `${c.ingredient_id}:${c.level}`).join('-');
+    const cartItemId = `${selectedProduct.id}-${custKey}`;
+    const itemPrice = selectedProduct.price;
     
     const existingIndex = cart.findIndex(item => item.id === cartItemId);
     if (existingIndex > -1) {
@@ -191,11 +208,7 @@ function App() {
         name: selectedProduct.name,
         price: itemPrice,
         quantity: customQty,
-        customizations: {
-          milk: customMilk,
-          sugar: customSugar,
-          ice: customIce
-        }
+        customizations: customizationsArray
       };
       setCart([...cart, newCartItem]);
     }
@@ -241,7 +254,8 @@ function App() {
       const orderData = {
         items: cart.map(item => ({
           menu_item_id: item.menuItemId,
-          quantity: item.quantity
+          quantity: item.quantity,
+          customizations: item.customizations
         })),
         status: 'pending',
         payment_method: paymentMethod,
@@ -274,9 +288,12 @@ function App() {
   const categories = [
     { name: 'All', icon: Sparkles },
     { name: 'Coffee', icon: Coffee },
-    { name: 'Specialty', icon: Coffee },
-    { name: 'Tea', icon: Coffee },
-    { name: 'Pastries', icon: Coffee }
+    { name: 'iced coffee', icon: Coffee },
+    { name: 'food and snacks', icon: Coffee },
+    { name: 'alcoholic drinks', icon: Coffee },
+    { name: 'platter', icon: Coffee },
+    { name: 'rice bowl', icon: Coffee },
+    { name: 'rice meals', icon: Coffee }
   ];
 
   // Filtered Menu Items
@@ -687,6 +704,19 @@ function App() {
                           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                             Qty: {item.quantity}
                           </span>
+                          {item.customizations && (
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                              {(() => {
+                                try {
+                                  const parsed = typeof item.customizations === 'string' ? JSON.parse(item.customizations) : item.customizations;
+                                  if (Array.isArray(parsed) && parsed.length > 0) {
+                                    return parsed.map((c: any) => `${c.name}: ${c.level}`).join(' | ');
+                                  }
+                                } catch(e) {}
+                                return null;
+                              })()}
+                            </p>
+                          )}
                         </div>
                         <span style={{ fontWeight: '600' }}>
                           Rs. {parseInt((item.price_at_order * 50 * item.quantity).toString())}
@@ -800,66 +830,34 @@ function App() {
                 </p>
               </div>
 
-              {/* Customizations options (only for drinks) */}
-              {selectedProduct.category !== 'Pastries' && selectedProduct.category !== 'Merchandise' && (
+              {/* Customizations options dynamically */}
+              {selectedProduct.ingredients && selectedProduct.ingredients.some((ing: any) => ing.is_customizable) && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {/* Milk Option */}
-                  <div style={styles.optionGroup}>
-                    <label style={styles.optionLabel}>Milk Type</label>
-                    <div style={styles.optionRow}>
-                      {['Whole Milk', 'Oat Milk (+$25)', 'Soy Milk (+$25)'].map(m => {
-                        const mVal = m.split(' ')[0] + ' Milk';
-                        const isSel = customMilk === mVal;
-                        return (
-                          <button 
-                            key={m} 
-                            onClick={() => setCustomMilk(mVal)}
-                            style={{...styles.optionSelector, ...(isSel ? styles.optionSelectorActive : {})}}
-                          >
-                            {m}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Sugar Option */}
-                  <div style={styles.optionGroup}>
-                    <label style={styles.optionLabel}>Sugar Level</label>
-                    <div style={styles.optionRow}>
-                      {['No Sugar', 'Less Sugar', 'Regular', 'Extra'].map(s => {
-                        const isSel = customSugar === s;
-                        return (
-                          <button 
-                            key={s} 
-                            onClick={() => setCustomSugar(s)}
-                            style={{...styles.optionSelector, ...(isSel ? styles.optionSelectorActive : {})}}
-                          >
-                            {s}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Ice Option */}
-                  <div style={styles.optionGroup}>
-                    <label style={styles.optionLabel}>Ice Level</label>
-                    <div style={styles.optionRow}>
-                      {['No Ice', 'Less Ice', 'Regular', 'Extra Ice'].map(i => {
-                        const isSel = customIce === i;
-                        return (
-                          <button 
-                            key={i} 
-                            onClick={() => setCustomIce(i)}
-                            style={{...styles.optionSelector, ...(isSel ? styles.optionSelectorActive : {})}}
-                          >
-                            {i}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  {selectedProduct.ingredients.filter((ing: any) => ing.is_customizable).map((ing: any) => {
+                    const currentLevel = selectedProductCustomizations[ing.ingredient_id] || 'Regular';
+                    return (
+                      <div key={ing.ingredient_id} style={styles.optionGroup}>
+                        <label style={styles.optionLabel}>{ing.name}</label>
+                        <div style={styles.optionRow}>
+                          {['None', 'Less', 'Regular', 'Extra'].map(level => {
+                            const isSel = currentLevel === level;
+                            return (
+                              <button 
+                                key={level} 
+                                onClick={() => setSelectedProductCustomizations(prev => ({
+                                  ...prev,
+                                  [ing.ingredient_id]: level
+                                }))}
+                                style={{...styles.optionSelector, ...(isSel ? styles.optionSelectorActive : {})}}
+                              >
+                                {level}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -925,9 +923,11 @@ function App() {
                         <h4 style={{ fontSize: '0.95rem', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>
                           {item.name}
                         </h4>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-                          {item.customizations.milk} | {item.customizations.sugar} | {item.customizations.ice}
-                        </p>
+                        {item.customizations && item.customizations.length > 0 && (
+                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+                            {item.customizations.map(c => `${c.name}: ${c.level}`).join(' | ')}
+                          </p>
+                        )}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                         <div style={styles.qtyControlSmall}>

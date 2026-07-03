@@ -4,7 +4,7 @@ from flask_cors import CORS
 from decimal import Decimal
 from datetime import datetime, timedelta
 from config import Config
-from models import db, Staff, Ingredient, MenuItem, IngredientRequest, StockInLog, Order, OrderItem, Transaction
+from models import db, Staff, Ingredient, MenuItem, MenuItemIngredient, IngredientRequest, StockInLog, Order, OrderItem, Transaction
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -104,6 +104,17 @@ def manage_menu():
             image_url=data.get('image_url')
         )
         db.session.add(item)
+        db.session.flush() # Populate ID
+
+        ingredients_data = data.get('ingredients', [])
+        for ing_item in ingredients_data:
+            menu_ing = MenuItemIngredient(
+                menu_item_id=item.id,
+                ingredient_id=ing_item['ingredient_id'],
+                default_quantity=float(ing_item['default_quantity']),
+                is_customizable=bool(ing_item.get('is_customizable', False))
+            )
+            db.session.add(menu_ing)
         db.session.commit()
         return jsonify(clean_decimal(item.to_dict())), 201
 
@@ -135,6 +146,20 @@ def update_menu_item(id):
     if 'image_url' in data:
         item.image_url = data['image_url']
         
+    if 'ingredients' in data:
+        # Clear existing
+        MenuItemIngredient.query.filter_by(menu_item_id=item.id).delete()
+        
+        ingredients_data = data['ingredients']
+        for ing_item in ingredients_data:
+            menu_ing = MenuItemIngredient(
+                menu_item_id=item.id,
+                ingredient_id=ing_item['ingredient_id'],
+                default_quantity=float(ing_item['default_quantity']),
+                is_customizable=bool(ing_item.get('is_customizable', False))
+            )
+            db.session.add(menu_ing)
+
     db.session.commit()
     return jsonify(clean_decimal(item.to_dict()))
 
@@ -302,6 +327,7 @@ def manage_staff():
 
 @app.route('/api/orders', methods=['POST'])
 def place_order():
+    import json
     data = request.json or {}
     items_data = data.get('items', [])
     if not items_data:
@@ -310,32 +336,38 @@ def place_order():
     total_amount = Decimal('0.00')
     order_items = []
     
-    # Recipe mapping: menu_item_id -> { ingredient_id -> quantity_per_unit }
-    RECIPES = {
-        1: {1: 0.018, 7: 1},        # Double Espresso: 18g Beans, 1 Cup
-        2: {1: 0.018, 7: 1},        # Americano: 18g Beans, 1 Cup
-        3: {1: 0.018, 2: 0.20, 7: 1, 8: 1}, # Classic Latte: 18g Beans, 200ml Whole Milk, 1 Cup, 1 Straw
-        4: {1: 0.018, 2: 0.15, 7: 1, 8: 1}, # Cappuccino: 18g Beans, 150ml Whole Milk, 1 Cup, 1 Straw
-        5: {1: 0.018, 2: 0.20, 5: 0.02, 7: 1, 8: 1}, # Vanilla Latte: 18g Beans, 200ml Whole Milk, 20ml Vanilla, 1 Cup, 1 Straw
-        6: {1: 0.018, 2: 0.15, 6: 0.02, 7: 1, 8: 1}, # Salted Caramel Macchiato: 18g Beans, 150ml Whole Milk, 20ml Caramel, 1 Cup, 1 Straw
-        7: {3: 0.20, 7: 1, 8: 1},   # Matcha Latte: 200ml Oat Milk, 1 Cup, 1 Straw
-        8: {1: 0.020, 7: 1, 8: 1},  # Cold Brew: 20g Beans, 1 Cup, 1 Straw
-        9: {9: 1},                  # Butter Croissant: 1 Frozen Croissant
-        10: {10: 1}                 # Chocolate Pastry: 1 Frozen Chocolate Croissant
-    }
-    # For customer orders (pending status), check ingredient stock levels first
-    if data.get('status') == 'pending':
-        for item in items_data:
-            menu_item_id = item.get('menu_item_id')
-            qty = item.get('quantity', 1)
-            menu_item = MenuItem.query.get(menu_item_id)
-            if menu_item:
-                recipe = RECIPES.get(menu_item_id, {})
-                for ing_id, req_qty in recipe.items():
-                    ing = Ingredient.query.get(ing_id)
-                    if ing and float(ing.stock_level) < (qty * req_qty):
-                        return jsonify({'error': f'Sorry, {menu_item.name} is temporarily out of stock due to shortage of {ing.name}.'}), 400
+    # First: Validate stock levels for all items dynamically
+    required_ingredients = {}
+    for item in items_data:
+        menu_item_id = item.get('menu_item_id')
+        qty = item.get('quantity', 1)
+        menu_item = MenuItem.query.get(menu_item_id)
+        if not menu_item:
+            return jsonify({'error': f'Item ID {menu_item_id} not found'}), 404
+        
+        customs = item.get('customizations', [])
+        customs_dict = {c['ingredient_id']: c.get('level', 'Regular') for c in customs if 'ingredient_id' in c}
 
+        for recipe_item in menu_item.ingredients:
+            ing_id = recipe_item.ingredient_id
+            default_qty = recipe_item.default_quantity
+            is_cust = recipe_item.is_customizable
+            
+            level = customs_dict.get(ing_id, 'Regular') if is_cust else 'Regular'
+            multipliers = {"None": 0.0, "Less": 0.5, "Regular": 1.0, "Extra": 1.5}
+            multiplier = multipliers.get(level, 1.0)
+            
+            needed = qty * (default_qty * multiplier)
+            required_ingredients[ing_id] = required_ingredients.get(ing_id, 0.0) + needed
+
+    # If it is a customer order (pending status), check if we have enough ingredients
+    if data.get('status') == 'pending':
+        for ing_id, needed in required_ingredients.items():
+            ing = Ingredient.query.get(ing_id)
+            if ing and float(ing.stock_level) < needed:
+                return jsonify({'error': f'Sorry, ingredients are temporarily out of stock due to shortage of {ing.name}.'}), 400
+
+    # Second: Deduct ingredients and build order items
     for item in items_data:
         menu_item_id = item.get('menu_item_id')
         qty = item.get('quantity', 1)
@@ -346,18 +378,40 @@ def place_order():
         price_snapshot = menu_item.price
         total_amount += price_snapshot * qty
         
+        customs = item.get('customizations', [])
+        valid_customs = []
+        customs_dict = {}
+        for c in customs:
+            if 'ingredient_id' in c:
+                customs_dict[c['ingredient_id']] = c.get('level', 'Regular')
+
+        for recipe_item in menu_item.ingredients:
+            ing_id = recipe_item.ingredient_id
+            default_qty = recipe_item.default_quantity
+            is_cust = recipe_item.is_customizable
+            
+            level = customs_dict.get(ing_id, 'Regular') if is_cust else 'Regular'
+            multipliers = {"None": 0.0, "Less": 0.5, "Regular": 1.0, "Extra": 1.5}
+            multiplier = multipliers.get(level, 1.0)
+            
+            needed = qty * (default_qty * multiplier)
+            ing = Ingredient.query.get(ing_id)
+            if ing:
+                ing.stock_level = max(0.0, float(ing.stock_level) - needed)
+            
+            if is_cust:
+                valid_customs.append({
+                    "ingredient_id": ing_id,
+                    "name": recipe_item.ingredient.name,
+                    "level": level
+                })
+
         order_items.append(OrderItem(
             menu_item_id=menu_item_id,
             quantity=qty,
-            price_at_order=price_snapshot
+            price_at_order=price_snapshot,
+            customizations=json.dumps(valid_customs)
         ))
-
-        # Deduct ingredients based on recipe
-        recipe = RECIPES.get(menu_item_id, {})
-        for ing_id, req_qty in recipe.items():
-            ing = Ingredient.query.get(ing_id)
-            if ing:
-                ing.stock_level = max(0.0, float(ing.stock_level) - (qty * req_qty))
 
     new_order = Order(
         status=data.get('status', 'completed'),
