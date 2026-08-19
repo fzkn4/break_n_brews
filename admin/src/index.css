@@ -261,6 +261,7 @@ body {
 
 /* Glass Inputs */
 .glass-input {
+  box-sizing: border-box;
   background: var(--input-bg);
   border: 1px solid var(--border-glass);
   border-radius: 8px;

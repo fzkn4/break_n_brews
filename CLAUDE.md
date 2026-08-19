@@ -89,6 +89,14 @@ customer's order tracker every 3s. The order lifecycle spans portals — custome
 tracker picks the change up on its next poll. Stock deductions ripple into the admin dashboard the same way.
 Valid order statuses are enforced server-side: `pending`, `preparing`, `completed`, `cancelled`.
 
+### Reviews are moderated, not live
+
+`POST /api/reviews` (what `customer/` sends after an order completes) always stores `is_published=False`
+unless the caller explicitly passes `is_published`. `GET /api/reviews` returns published rows only; admin
+asks for `?all=1` to see the queue and `PUT /api/reviews/<id>` to publish. One review per `order_id` is
+enforced server-side, so a guest cannot flood the wall from a single visit. The customer portal also
+remembers which orders it has reviewed in `bb_reviewed_orders` to hide the prompt after submitting.
+
 ### Frontend conventions
 
 - Each portal is a single stateful `App.tsx` holding all data state and all fetch handlers, passing them down as
@@ -112,14 +120,19 @@ Valid order statuses are enforced server-side: `pending`, `preparing`, `complete
   `staffs/` and `customer/` (admin has `AnalyticsData`/`ReportData` and recipe fields; staffs has
   `Order`/`OrderItem`; customer adds cart and checkout shapes). When a model changes, update every portal's
   copy that uses it.
-- All fetches are guarded with `if (res.ok)`, so failing endpoints degrade to empty state silently. One live
-  instance: `staffs/src/App.tsx` fetches `${API_URL}/menu_items`, which does not exist — the menu endpoint is
-  `/api/menu`.
+- All fetches are guarded with `if (res.ok)`, so a failing endpoint degrades to empty state silently with nothing
+  in the UI to say so. Check the network tab before concluding a list is genuinely empty.
+- **No portal hardcodes catalog or storefront content.** Menu items, prices, product imagery
+  (`menu_items.image_url`), recipes, menu categories, ingredient categories and units, plus the home page
+  testimonials, all come from the API. Admin's category and unit fields are free text backed by a `<datalist>`
+  of the values already in the database, so a new category needs no code change and shows up in the customer
+  portal's rail on its next poll.
 
 ### API surface (`backend/app.py`, ~600 lines, all routes in one file)
 
-`/api/ingredients`, `/api/menu`, `/api/requests`, `/api/stockin`, `/api/staff`, `/api/orders` (CRUD subsets),
-plus `/api/login`, `/api/analytics?days=N` (KPIs, revenue trend, category distribution, low stock) and
+`/api/ingredients`, `/api/menu`, `/api/requests`, `/api/stockin`, `/api/staff`, `/api/orders`, `/api/reviews`
+(CRUD subsets), plus `/api/login`, `/api/subscribers` (newsletter signups),
+`/api/analytics?days=N` (KPIs, revenue trend, category distribution, low stock) and
 `/api/reports` (inventory health, supplier summary, sales breakdown). `clean_decimal()` recursively converts
 `Decimal` to `float` before every JSON response — use it on any new response containing money.
 

@@ -4,7 +4,7 @@ from flask_cors import CORS
 from decimal import Decimal
 from datetime import datetime, timedelta
 from config import Config
-from models import db, Staff, Ingredient, MenuItem, MenuItemIngredient, IngredientRequest, StockInLog, Order, OrderItem, Transaction
+from models import db, Staff, Ingredient, MenuItem, MenuItemIngredient, IngredientRequest, StockInLog, Order, OrderItem, Transaction, Review, Subscriber
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -452,6 +452,112 @@ def update_order(id):
     order.status = new_status
     db.session.commit()
     return jsonify(clean_decimal(order.to_dict()))
+
+# ----------------- REVIEWS ENDPOINTS -----------------
+
+@app.route('/api/reviews', methods=['GET', 'POST'])
+def manage_reviews():
+    if request.method == 'POST':
+        data = request.json or {}
+        name = (data.get('customer_name') or '').strip()
+        comment = (data.get('comment') or '').strip()
+        if not name or not comment:
+            return jsonify({'error': 'A name and a comment are required'}), 400
+
+        try:
+            rating = int(data.get('rating', 5))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Rating must be a whole number from 1 to 5'}), 400
+        if not 1 <= rating <= 5:
+            return jsonify({'error': 'Rating must be between 1 and 5'}), 400
+
+        order_id = data.get('order_id')
+        if order_id is not None:
+            if not Order.query.get(order_id):
+                return jsonify({'error': f'Order {order_id} not found'}), 404
+            # One review per order, so a customer cannot flood the wall from a single visit.
+            if Review.query.filter_by(order_id=order_id).first():
+                return jsonify({'error': 'This order has already been reviewed'}), 400
+
+        review = Review(
+            customer_name=name[:100],
+            role=((data.get('role') or '').strip() or None),
+            rating=rating,
+            comment=comment,
+            order_id=order_id,
+            # Anything a guest submits is held back until an admin publishes it.
+            is_published=bool(data.get('is_published', False))
+        )
+        db.session.add(review)
+        db.session.commit()
+        return jsonify(clean_decimal(review.to_dict())), 201
+
+    # GET reviews — published only unless the caller explicitly asks for everything (admin).
+    query = Review.query
+    if request.args.get('all', '').lower() not in ('1', 'true', 'yes'):
+        query = query.filter_by(is_published=True)
+
+    reviews = query.order_by(Review.created_at.desc()).all()
+
+    limit = request.args.get('limit')
+    if limit:
+        try:
+            reviews = reviews[:max(0, int(limit))]
+        except ValueError:
+            pass
+
+    return jsonify(clean_decimal([r.to_dict() for r in reviews]))
+
+@app.route('/api/reviews/<int:id>', methods=['PUT', 'DELETE'])
+def update_review(id):
+    review = Review.query.get_or_404(id)
+    if request.method == 'DELETE':
+        db.session.delete(review)
+        db.session.commit()
+        return jsonify({'message': 'Review deleted successfully'})
+
+    data = request.json or {}
+    if 'is_published' in data:
+        review.is_published = bool(data['is_published'])
+    if 'customer_name' in data:
+        review.customer_name = str(data['customer_name']).strip()[:100]
+    if 'role' in data:
+        review.role = (str(data['role']).strip() or None)
+    if 'comment' in data:
+        review.comment = str(data['comment']).strip()
+    if 'rating' in data:
+        try:
+            rating = int(data['rating'])
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Rating must be a whole number from 1 to 5'}), 400
+        if not 1 <= rating <= 5:
+            return jsonify({'error': 'Rating must be between 1 and 5'}), 400
+        review.rating = rating
+
+    db.session.commit()
+    return jsonify(clean_decimal(review.to_dict()))
+
+# ----------------- NEWSLETTER ENDPOINTS -----------------
+
+@app.route('/api/subscribers', methods=['GET', 'POST'])
+def manage_subscribers():
+    if request.method == 'POST':
+        email = ((request.json or {}).get('email') or '').strip().lower()
+        if not email or '@' not in email or '.' not in email.split('@')[-1]:
+            return jsonify({'error': 'A valid email address is required'}), 400
+
+        existing = Subscriber.query.filter_by(email=email).first()
+        if existing:
+            # Subscribing twice is not an error worth showing a guest.
+            return jsonify(clean_decimal(existing.to_dict())), 200
+
+        subscriber = Subscriber(email=email)
+        db.session.add(subscriber)
+        db.session.commit()
+        return jsonify(clean_decimal(subscriber.to_dict())), 201
+
+    subscribers = Subscriber.query.order_by(Subscriber.created_at.desc()).all()
+    return jsonify(clean_decimal([s.to_dict() for s in subscribers]))
 
 # ----------------- ANALYTICS & REPORTS ENDPOINTS -----------------
 

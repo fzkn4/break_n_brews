@@ -217,3 +217,39 @@ class Transaction(db.Model):
             'payment_method': self.payment_method,
             'created_at': self.created_at.isoformat()
         }
+
+class Review(db.Model):
+    __tablename__ = 'reviews'
+    id = db.Column(db.Integer, primary_key=True)
+    customer_name = db.Column(db.String(100), nullable=False)
+    role = db.Column(db.String(100), nullable=True)  # free-text blurb under the name, e.g. "Regular since 2021"
+    rating = db.Column(db.Integer, nullable=False, default=5)  # 1-5
+    comment = db.Column(db.Text, nullable=False)
+    is_published = db.Column(db.Boolean, default=False)  # customer submissions wait for an admin
+    order_id = db.Column(db.Integer, db.ForeignKey('orders.id', ondelete='SET NULL'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'customer_name': self.customer_name,
+            'role': self.role,
+            'rating': self.rating,
+            'comment': self.comment,
+            'is_published': self.is_published,
+            'order_id': self.order_id,
+            'created_at': self.created_at.isoformat()
+        }
+
+class Subscriber(db.Model):
+    __tablename__ = 'subscribers'
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'email': self.email,
+            'created_at': self.created_at.isoformat()
+        }

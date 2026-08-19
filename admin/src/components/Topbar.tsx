@@ -40,6 +40,7 @@ export const Topbar: React.FC<TopbarProps> = ({
       case 'menu': return 'Manage Cafe Menu';
       case 'requests': return 'Manage Staff Requests';
       case 'stockin': return 'Record Stock In';
+      case 'reviews': return 'Reviews & Subscribers';
       case 'reports': return 'View Reports';
       default: return 'Break & Brews';
     }

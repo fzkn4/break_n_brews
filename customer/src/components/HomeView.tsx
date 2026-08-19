@@ -1,53 +1,38 @@
-import { ArrowRight, Clock, Heart, Star } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowRight, Check, Clock, Heart } from 'lucide-react';
 import ProductCard from './ProductCard';
 import CategoryRail from './CategoryRail';
-import { categoriesFrom } from '../lib/catalog';
+import StarRating from './StarRating';
+import { CUSTOMIZATION_LEVELS, categoriesFrom } from '../lib/catalog';
 import type { Availability } from '../lib/catalog';
-import type { MenuItem, Order } from '../types';
+import type { MenuItem, Order, Review } from '../types';
 
 interface HomeViewProps {
   menuItems: MenuItem[];
   loading: boolean;
   favorites: number[];
   liveOrder: Order | null;
+  reviews: Review[];
   availabilityFor: (item: MenuItem) => Availability;
   onOpen: (item: MenuItem) => void;
   onToggleFavorite: (id: number) => void;
   onBrowse: (category?: string) => void;
   onTrack: () => void;
+  onSubscribe: (email: string) => Promise<boolean>;
 }
-
-const REVIEWS = [
-  {
-    name: 'Marisol Reyes',
-    role: 'Regular since 2021',
-    rating: 5,
-    text: 'I order from the table and the drinks land before I have finished racking the balls. The live tracker is the best part.'
-  },
-  {
-    name: 'Dan Villanueva',
-    role: 'Freelance designer',
-    rating: 5,
-    text: 'Being able to dial the syrup down to "Less" without explaining it to anyone is why I keep coming back here to work.'
-  },
-  {
-    name: 'Kat Ilagan',
-    role: 'League night captain',
-    rating: 4,
-    text: 'We order platters for the whole table in one go and everything arrives together. Kitchen keeps up even on a full house.'
-  }
-];
 
 export default function HomeView({
   menuItems,
   loading,
   favorites,
   liveOrder,
+  reviews,
   availabilityFor,
   onOpen,
   onToggleFavorite,
   onBrowse,
-  onTrack
+  onTrack,
+  onSubscribe
 }: HomeViewProps) {
   const categories = categoriesFrom(menuItems).filter((category) => category !== 'All');
 
@@ -97,7 +82,7 @@ export default function HomeView({
                 <dt className="hero__stat-label">Items on the menu</dt>
               </div>
               <div>
-                <dd className="hero__stat-value">4</dd>
+                <dd className="hero__stat-value">{CUSTOMIZATION_LEVELS.length}</dd>
                 <dt className="hero__stat-label">Ways to customise</dt>
               </div>
               <div>
@@ -191,52 +176,42 @@ export default function HomeView({
         </section>
       )}
 
-      <section className="section shell">
-        <div className="section-head">
-          <span className="section-eyebrow">Come and join</span>
-          <h2 className="section-title">Our happy customers</h2>
-        </div>
-        <div className="review-grid">
-          {REVIEWS.map((review) => (
-            <article className="review-card" key={review.name}>
-              <div className="review-card__head">
-                <span className="review-card__avatar" aria-hidden="true">
-                  {review.name.charAt(0)}
-                </span>
-                <div>
-                  <h3 className="review-card__name">{review.name}</h3>
-                  <span className="review-card__role">{review.role}</span>
+      {reviews.length > 0 && (
+        <section className="section shell">
+          <div className="section-head">
+            <span className="section-eyebrow">Come and join</span>
+            <h2 className="section-title">Our happy customers</h2>
+            <p className="section-subtitle">
+              Left by people who ordered here, published by the team.
+            </p>
+          </div>
+          <div className="review-grid">
+            {reviews.map((review) => (
+              <article className="review-card" key={review.id}>
+                <div className="review-card__head">
+                  <span className="review-card__avatar" aria-hidden="true">
+                    {review.customer_name.charAt(0).toUpperCase()}
+                  </span>
+                  <div>
+                    <h3 className="review-card__name">{review.customer_name}</h3>
+                    {review.role && <span className="review-card__role">{review.role}</span>}
+                  </div>
+                  <div className="review-card__stars">
+                    <StarRating value={review.rating} size={14} />
+                  </div>
                 </div>
-                <div className="review-card__stars" aria-label={`${review.rating} out of 5`}>
-                  {[0, 1, 2, 3, 4].map((index) => (
-                    <Star
-                      key={index}
-                      size={14}
-                      fill={index < review.rating ? 'var(--gold)' : 'none'}
-                      color={index < review.rating ? 'var(--gold)' : 'var(--border-strong)'}
-                    />
-                  ))}
-                </div>
-              </div>
-              <p className="review-card__text">“{review.text}”</p>
-            </article>
-          ))}
-        </div>
-      </section>
+                <p className="review-card__text">“{review.comment}”</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="newsletter">
         <div className="shell">
           <h2 className="section-title">Join in and get 15% off</h2>
           <p className="section-subtitle">Subscribe for seasonal roasts, new plates and the odd discount code.</p>
-          <form className="newsletter__form" onSubmit={(event) => event.preventDefault()}>
-            <label className="visually-hidden" htmlFor="newsletter-email">
-              Email address
-            </label>
-            <input id="newsletter-email" type="email" placeholder="Email address" required />
-            <button className="btn btn-primary" type="submit">
-              Subscribe
-            </button>
-          </form>
+          <NewsletterForm onSubscribe={onSubscribe} />
         </div>
       </section>
     </>
@@ -255,5 +230,47 @@ export function SkeletonGrid({ count = 4 }: { count?: number }) {
         </div>
       ))}
     </div>
+  );
+}
+
+function NewsletterForm({ onSubscribe }: { onSubscribe: (email: string) => Promise<boolean> }) {
+  const [email, setEmail] = useState('');
+  const [state, setState] = useState<'idle' | 'sending' | 'done'>('idle');
+
+  if (state === 'done') {
+    return (
+      <p className="newsletter__done">
+        <Check size={18} />
+        You are on the list — watch your inbox for the discount code.
+      </p>
+    );
+  }
+
+  return (
+    <form
+      className="newsletter__form"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setState('sending');
+        const ok = await onSubscribe(email.trim());
+        setState(ok ? 'done' : 'idle');
+        if (ok) setEmail('');
+      }}
+    >
+      <label className="visually-hidden" htmlFor="newsletter-email">
+        Email address
+      </label>
+      <input
+        id="newsletter-email"
+        type="email"
+        placeholder="Email address"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+        required
+      />
+      <button className="btn btn-primary" type="submit" disabled={state === 'sending'}>
+        {state === 'sending' ? 'Subscribing…' : 'Subscribe'}
+      </button>
+    </form>
   );
 }

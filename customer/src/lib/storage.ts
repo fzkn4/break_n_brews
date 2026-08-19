@@ -6,7 +6,8 @@ export const STORAGE_KEYS = {
   activeOrder: 'bb_active_order_id',
   orderHistory: 'bb_order_history',
   orderMeta: 'bb_order_meta',
-  checkout: 'bb_checkout_details'
+  checkout: 'bb_checkout_details',
+  reviewedOrders: 'bb_reviewed_orders'
 } as const;
 
 export function readStore<T>(key: string, fallback: T): T {

@@ -36,36 +36,13 @@ export function titleCase(value: string): string {
 
 // ----- Imagery -------------------------------------------------------------
 
+/** Shown only when a menu item has no `image_url` in the database at all. */
 export const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=800&auto=format&fit=crop&q=80';
 
-/**
- * Menu items seeded before real photography have placeholder `/assets/*.jpg` paths that do not
- * resolve, so keyword-matched stock photos stand in. Anything the admin saves with a real URL wins.
- */
-const KEYWORD_IMAGES: [RegExp, string][] = [
-  [/espresso/i, 'https://images.unsplash.com/photo-1521302080334-4bebac2763a6?w=800&auto=format&fit=crop&q=80'],
-  [/americano/i, 'https://images.unsplash.com/photo-1551030173-122aabc4489c?w=800&auto=format&fit=crop&q=80'],
-  [/vanilla/i, 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=800&auto=format&fit=crop&q=80'],
-  [/cappuccino/i, 'https://images.unsplash.com/photo-1534778101976-62847782c213?w=800&auto=format&fit=crop&q=80'],
-  [/macchiato|caramel/i, 'https://images.unsplash.com/photo-1485808191679-5f86510681a2?w=800&auto=format&fit=crop&q=80'],
-  [/matcha/i, 'https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80'],
-  [/cold brew|iced/i, 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=800&auto=format&fit=crop&q=80'],
-  [/latte/i, 'https://images.unsplash.com/photo-1541167760496-1628856ab772?w=800&auto=format&fit=crop&q=80'],
-  [/croissant/i, 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=800&auto=format&fit=crop&q=80'],
-  [/pastry|chocolate/i, 'https://images.unsplash.com/photo-1608198093002-ad4e005484ec?w=800&auto=format&fit=crop&q=80'],
-  [/beer/i, 'https://images.unsplash.com/photo-1608270586620-248524c67de9?w=800&auto=format&fit=crop&q=80'],
-  [/wine/i, 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=800&auto=format&fit=crop&q=80'],
-  [/fries|platter/i, 'https://images.unsplash.com/photo-1576107232684-1279f390859f?w=800&auto=format&fit=crop&q=80'],
-  [/beef|bowl/i, 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&auto=format&fit=crop&q=80'],
-  [/pork|rice/i, 'https://images.unsplash.com/photo-1606787366850-de6330128bfc?w=800&auto=format&fit=crop&q=80'],
-  [/coffee/i, 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800&auto=format&fit=crop&q=80']
-];
-
-export function productImage(item: Pick<MenuItem, 'name' | 'image_url'>): string {
-  if (item.image_url && /^https?:\/\//.test(item.image_url)) return item.image_url;
-  const match = KEYWORD_IMAGES.find(([pattern]) => pattern.test(item.name));
-  return match ? match[1] : FALLBACK_IMAGE;
+/** Product imagery lives in `menu_items.image_url`; the admin portal is where it is set. */
+export function productImage(item: Pick<MenuItem, 'image_url'>): string {
+  return item.image_url?.trim() || FALLBACK_IMAGE;
 }
 
 // ----- Categories ----------------------------------------------------------

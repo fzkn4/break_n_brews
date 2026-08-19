@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, X, AlertTriangle, Filter } from 'lucide-react';
 import type { Ingredient } from '../types';
 
@@ -28,21 +28,23 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
   const [reorderPoint, setReorderPoint] = useState('5');
   const [costPerUnit, setCostPerUnit] = useState('0.00');
 
-  const categories = [
-    'Coffee Beans',
-    'Dairy',
-    'Syrups',
-    'Sweeteners',
-    'Packaging',
-    'Pastries'
-  ];
+  // Both lists come from the ingredients in the database; the fixed list used to omit
+  // categories the seed actually uses (Beverages, Grains, Meat), so they could not be picked.
+  const categories = useMemo(
+    () => [...new Set(ingredients.map(ing => ing.category))].sort((a, b) => a.localeCompare(b)),
+    [ingredients]
+  );
+  const units = useMemo(
+    () => [...new Set(ingredients.map(ing => ing.unit))].sort((a, b) => a.localeCompare(b)),
+    [ingredients]
+  );
 
   const startAdd = () => {
     setEditIng(null);
     setName('');
-    setCategory('Coffee Beans');
+    setCategory(categories[0] ?? '');
     setStockLevel('0');
-    setUnit('kg');
+    setUnit(units[0] ?? '');
     setReorderPoint('5');
     setCostPerUnit('0.00');
     setShowModal(true);
@@ -232,32 +234,38 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
               <div style={styles.inputRow}>
                 <div style={{ ...styles.inputGroup, flex: 1 }}>
                   <label style={styles.label}>Category</label>
-                  <select 
+                  <input 
                     className="glass-input"
+                    list="ingredient-category-options"
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
+                    placeholder="e.g. Dairy"
                     style={{ width: '100%' }}
-                  >
+                    required
+                  />
+                  <datalist id="ingredient-category-options">
                     {categories.map(c => (
-                      <option key={c} value={c} style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>{c}</option>
+                      <option key={c} value={c} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
 
                 <div style={{ ...styles.inputGroup, width: '100px' }}>
                   <label style={styles.label}>Unit</label>
-                  <select 
+                  <input 
                     className="glass-input"
+                    list="ingredient-unit-options"
                     value={unit}
                     onChange={(e) => setUnit(e.target.value)}
+                    placeholder="kg"
                     style={{ width: '100%' }}
-                  >
-                    <option value="kg" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>kg</option>
-                    <option value="L" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Liters (L)</option>
-                    <option value="pcs" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>pieces (pcs)</option>
-                    <option value="bags" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>bags</option>
-                    <option value="g" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>grams (g)</option>
-                  </select>
+                    required
+                  />
+                  <datalist id="ingredient-unit-options">
+                    {units.map(u => (
+                      <option key={u} value={u} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 

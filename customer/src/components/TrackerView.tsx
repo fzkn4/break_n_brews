@@ -1,4 +1,6 @@
 import { Ban, Check, ChefHat, ClipboardList, PartyPopper, Receipt, RotateCcw } from 'lucide-react';
+import ReviewForm from './ReviewForm';
+import type { ReviewDraft } from './ReviewForm';
 import { formatPrice, parseServerTime, summariseCustomizations, titleCase } from '../lib/catalog';
 import type { Order, OrderMeta, OrderStatus } from '../types';
 
@@ -10,6 +12,10 @@ interface TrackerViewProps {
   onBrowse: () => void;
   onReorder: (order: Order) => void;
   onStartNew: () => void;
+  reviewed: boolean;
+  reviewSubmitting: boolean;
+  reviewError: string | null;
+  onSubmitReview: (order: Order, draft: ReviewDraft) => void;
 }
 
 const STEPS: { status: OrderStatus; label: string; hint: string; Icon: typeof Check }[] = [
@@ -37,7 +43,19 @@ function timeLabel(iso: string): string {
   return parseServerTime(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function TrackerView({ order, meta, history, onSelect, onBrowse, onReorder, onStartNew }: TrackerViewProps) {
+export default function TrackerView({
+  order,
+  meta,
+  history,
+  onSelect,
+  onBrowse,
+  onReorder,
+  onStartNew,
+  reviewed,
+  reviewSubmitting,
+  reviewError,
+  onSubmitReview
+}: TrackerViewProps) {
   if (!order) {
     return (
       <section className="section shell">
@@ -196,6 +214,26 @@ export default function TrackerView({ order, meta, history, onSelect, onBrowse, 
             </button>
           </div>
         </div>
+
+        {order.status === 'completed' &&
+          (reviewed ? (
+            <div className="callout callout--success" style={{ marginTop: 20 }}>
+              <Check size={22} />
+              <div>
+                <div className="callout__title">Thanks for the review</div>
+                <div className="callout__text">
+                  It appears on the home page once the team has had a look at it.
+                </div>
+              </div>
+            </div>
+          ) : (
+            <ReviewForm
+              defaultName={meta?.name ?? ''}
+              submitting={reviewSubmitting}
+              error={reviewError}
+              onSubmit={(draft) => onSubmitReview(order, draft)}
+            />
+          ))}
 
         {history.length > 1 && (
           <div style={{ marginTop: 34 }}>

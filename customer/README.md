@@ -41,3 +41,10 @@ src/
   ids, and per-order name/table/payment. The last one exists because the `orders` table has no columns
   for it — it is display-only and never leaves the browser.
 - **Polling, not sockets**: the catalog refreshes every 10s, the active order every 3s.
+- **Nothing about the catalog is hardcoded.** Products, prices, categories and images all come from the API —
+  `productImage()` returns `menu_items.image_url` and card copy is derived from each item's recipe. The only
+  static values left are the category *icons* (a regex-to-icon map with a coffee-cup default) and a single
+  fallback photo for items saved without an image. Add a category in admin and it appears here on the next poll.
+- The home page testimonials come from `GET /api/reviews` (published rows only). After an order reaches
+  `completed`, the tracker offers a review form that POSTs to `/api/reviews` with the `order_id`; it lands
+  unpublished and an admin approves it. The newsletter form POSTs to `/api/subscribers`.
