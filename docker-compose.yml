@@ -1,0 +1,97 @@
+# Runs the whole Break & Brews stack: PostgreSQL, the Flask API, and the three
+# React portals in dev mode with hot reload.
+#
+#   docker compose up --build
+#
+# Admin http://localhost:5173 · Staff http://localhost:5174 · Customer http://localhost:5176
+# API   http://localhost:5000/api
+#
+# The portals hardcode API_URL = http://localhost:5000/api and run in the
+# browser, so the API must stay published on host port 5000.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-break_and_brews}
+    ports:
+      # 5434 by default so this never fights a PostgreSQL already running on the host.
+      - "${DB_PORT:-5434}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-break_and_brews}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-break_and_brews}
+      SECRET_KEY: ${SECRET_KEY:-break-and-brews-super-secret-key-9876}
+      FLASK_APP: app.py
+      FLASK_DEBUG: "1"
+      PORT: "5000"
+      # Set to 1 to wipe and re-seed on the next start.
+      SEED_ON_START: ${SEED_ON_START:-0}
+    ports:
+      - "5000:5000"
+    volumes:
+      # Hot reload: Flask's debug reloader picks up edits to the mounted source.
+      - ./backend:/app
+      - /app/__pycache__
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  admin:
+    build:
+      context: ./admin
+      dockerfile: ../docker/frontend.Dockerfile
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./admin:/app
+      # Keep the image's node_modules; the host copy (if any) must not shadow it.
+      - /app/node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  staffs:
+    build:
+      context: ./staffs
+      dockerfile: ../docker/frontend.Dockerfile
+    command: npm run dev -- --host 0.0.0.0 --port 5174
+    ports:
+      - "5174:5174"
+    volumes:
+      - ./staffs:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  customer:
+    build:
+      context: ./customer
+      dockerfile: ../docker/frontend.Dockerfile
+    command: npm run dev -- --host 0.0.0.0 --port 5176
+    ports:
+      - "5176:5176"
+    volumes:
+      - ./customer:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
