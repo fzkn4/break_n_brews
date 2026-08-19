@@ -38,7 +38,7 @@ Frontends (from `admin/`, `staffs/`, or `customer/`):
 
 ```bash
 npm install
-npm run dev      # admin :5173, staffs :5174 (customer has no configured port — Vite picks the next free one)
+npm run dev      # admin :5173, staffs :5174, customer :5176
 npm run build    # tsc -b && vite build
 npm run lint     # oxlint (config in .oxlintrc.json)
 ```
@@ -72,6 +72,10 @@ makes every menu item a bill of materials over `Ingredient`. Nearly every behavi
 - **Customizations are stored denormalized** as a JSON string in `OrderItem.customizations` alongside
   `price_at_order`, so historical orders survive recipe and price edits.
 - Editing a menu item's recipe in `admin/` immediately changes what future orders consume; there is no versioning.
+- **`customer/` mirrors the same maths client-side** (`customer/src/lib/catalog.ts`): it fetches `/api/ingredients`,
+  walks each recipe, subtracts what the cart has already reserved, and uses the result to badge items "Only N left"
+  or "Sold out" and cap the quantity stepper. It is a courtesy layer only — the backend still decides, and its 400
+  message is shown to the customer verbatim.
 
 Other stock movements: `POST /api/stockin` adds quantity and recomputes `cost_per_unit` from `cost / quantity`;
 approving an `IngredientRequest` (`PUT /api/requests/<id>`) deducts the requested quantity and un-approving adds it
@@ -89,18 +93,25 @@ Valid order statuses are enforced server-side: `pending`, `preparing`, `complete
 
 - Each portal is a single stateful `App.tsx` holding all data state and all fetch handlers, passing them down as
   props to presentational components. No router, no state library, no data-fetching library — `activeTab` string
-  state switches views. `customer/` has no `components/` directory at all; the whole portal is one 1700-line
-  `App.tsx`.
-- `const API_URL = 'http://localhost:5000/api'` is hardcoded at the top of each `App.tsx`.
+  state switches views.
+- `const API_URL = 'http://localhost:5000/api'` is hardcoded at the top of each `App.tsx` — except `customer/`,
+  which keeps it in `src/lib/catalog.ts` alongside its formatting and stock helpers.
 - Auth is client-side only: `POST /api/login` returns `{name, email, role}`, which is stashed in `localStorage`
   (`bb_admin_user` / `bb_staff_user`). No tokens, no session, and no API endpoint checks a role. The `customer/`
-  portal has no login and tracks its order via `bb_active_order_id` in `localStorage`.
+  portal has no login; it keeps cart, favourites, checkout details, active order id, recent order ids and
+  per-order name/table/payment under `bb_*` keys in `localStorage` (see `customer/src/lib/storage.ts`).
 - Styling is a mix: shared layout/component classes live in `index.css` (dark theme by default, `.light-theme` on
   `<html>` toggles light in admin), while per-element layout is frequently written as inline `style={{}}` objects.
-  Match whichever the surrounding file uses.
-- `types.ts` mirrors the backend `to_dict()` shapes and is **duplicated and divergent** across `admin/` and
-  `staffs/` (admin has `AnalyticsData`/`ReportData` and recipe fields; staffs has `Order`/`OrderItem`). When a
-  model changes, update every portal's copy that uses it.
+  Match whichever the surrounding file uses. `customer/` is the exception — it is fully class-based off the
+  cream/espresso tokens in its own `index.css`, with breakpoints at 900/780/520px and a mobile tab bar; keep new
+  customer markup on classes rather than inline styles.
+- Money renders as `$0.00` in all three portals.
+- Backend timestamps are naive UTC (`datetime.utcnow().isoformat()`, no `Z`). `customer/` parses them through
+  `parseServerTime()`; anywhere else `new Date(iso)` silently reads them as local time.
+- `types.ts` mirrors the backend `to_dict()` shapes and is **duplicated and divergent** across `admin/`,
+  `staffs/` and `customer/` (admin has `AnalyticsData`/`ReportData` and recipe fields; staffs has
+  `Order`/`OrderItem`; customer adds cart and checkout shapes). When a model changes, update every portal's
+  copy that uses it.
 - All fetches are guarded with `if (res.ok)`, so failing endpoints degrade to empty state silently. One live
   instance: `staffs/src/App.tsx` fetches `${API_URL}/menu_items`, which does not exist — the menu endpoint is
   `/api/menu`.
