@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, X, Eye, EyeOff, Filter, Coffee } from 'lucide-react';
 import type { MenuItem, Ingredient } from '../types';
 
@@ -36,20 +36,16 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
   }[]>([]);
   const [newIngredientId, setNewIngredientId] = useState<number | ''>('');
 
-  const categories = [
-    'Coffee',
-    'iced coffee',
-    'food and snacks',
-    'alcoholic drinks',
-    'platter',
-    'rice bowl',
-    'rice meals'
-  ];
+  // Categories are whatever the menu in the database actually uses — no fixed list to fall behind.
+  const categories = useMemo(
+    () => [...new Set(menuItems.map(item => item.category))].sort((a, b) => a.localeCompare(b)),
+    [menuItems]
+  );
 
   const startAdd = () => {
     setEditItem(null);
     setName('');
-    setCategory('Coffee');
+    setCategory(categories[0] ?? '');
     setPrice('3.50');
     setIsAvailable(true);
     setImageUrl('');
@@ -293,16 +289,20 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
               <div style={styles.inputRow}>
                 <div style={{ ...styles.inputGroup, flex: 1 }}>
                   <label style={styles.label}>Category</label>
-                  <select 
+                  <input 
                     className="glass-input"
+                    list="menu-category-options"
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
+                    placeholder="e.g. Coffee"
                     style={{ width: '100%' }}
-                  >
+                    required
+                  />
+                  <datalist id="menu-category-options">
                     {categories.map(c => (
-                      <option key={c} value={c} style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>{c}</option>
+                      <option key={c} value={c} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
 
                 <div style={{ ...styles.inputGroup, flex: 1 }}>

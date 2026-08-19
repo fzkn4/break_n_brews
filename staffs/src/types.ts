@@ -53,6 +53,12 @@ export interface Staff {
   created_at: string;
 }
 
+export interface OrderCustomization {
+  ingredient_id: number;
+  name: string;
+  level: 'None' | 'Less' | 'Regular' | 'Extra';
+}
+
 export interface OrderItem {
   id: number;
   order_id: number;
@@ -61,6 +67,8 @@ export interface OrderItem {
   quantity: number;
   price_at_order: number;
   subtotal: number;
+  /** Already parsed out of the JSON column by the backend's `to_dict()`. */
+  customizations: OrderCustomization[];
 }
 
 export interface Order {

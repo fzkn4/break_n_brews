@@ -112,9 +112,12 @@ Valid order statuses are enforced server-side: `pending`, `preparing`, `complete
   `staffs/` and `customer/` (admin has `AnalyticsData`/`ReportData` and recipe fields; staffs has
   `Order`/`OrderItem`; customer adds cart and checkout shapes). When a model changes, update every portal's
   copy that uses it.
-- All fetches are guarded with `if (res.ok)`, so failing endpoints degrade to empty state silently. One live
-  instance: `staffs/src/App.tsx` fetches `${API_URL}/menu_items`, which does not exist — the menu endpoint is
-  `/api/menu`.
+- All fetches are guarded with `if (res.ok)`, so a failing endpoint degrades to empty state silently with nothing
+  in the UI to say so. Check the network tab before concluding a list is genuinely empty.
+- **No portal hardcodes catalog data.** Menu items, prices, product imagery (`menu_items.image_url`), recipes,
+  menu categories, ingredient categories and units all come from the API. Admin's category and unit fields are
+  free text backed by a `<datalist>` of the values already in the database, so a new category needs no code
+  change and shows up in the customer portal's rail on its next poll.
 
 ### API surface (`backend/app.py`, ~600 lines, all routes in one file)
 

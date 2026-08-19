@@ -67,45 +67,45 @@ def seed_database():
     # Categories: Coffee, iced coffee, food and snacks, alcoholic drinks, platter, rice bowl, rice meals
     items_data = [
         # Coffee
-        {"name": "Double Espresso", "category": "Coffee", "price": Decimal('3.20'), "image_url": "/assets/espresso.jpg",
+        {"name": "Double Espresso", "category": "Coffee", "price": Decimal('3.20'), "image_url": "https://images.unsplash.com/photo-1521302080334-4bebac2763a6?w=800&auto=format&fit=crop&q=80",
          "recipe": [("beans", 0.018, False), ("cups", 1.0, False)]},
-        {"name": "Caffè Americano", "category": "Coffee", "price": "3.50", "image_url": "/assets/americano.jpg",
+        {"name": "Caffè Americano", "category": "Coffee", "price": "3.50", "image_url": "https://images.unsplash.com/photo-1551030173-122aabc4489c?w=800&auto=format&fit=crop&q=80",
          "recipe": [("beans", 0.018, False), ("cups", 1.0, False)]},
-        {"name": "Classic Latte", "category": "Coffee", "price": "4.50", "image_url": "/assets/latte.jpg",
+        {"name": "Classic Latte", "category": "Coffee", "price": "4.50", "image_url": "https://images.unsplash.com/photo-1541167760496-1628856ab772?w=800&auto=format&fit=crop&q=80",
          "recipe": [("beans", 0.018, False), ("milk", 0.20, True), ("sugar", 0.01, True), ("cups", 1.0, False), ("straws", 1.0, False)]},
-        {"name": "Vanilla Latte", "category": "Coffee", "price": "5.20", "image_url": "/assets/vanilla_latte.jpg",
+        {"name": "Vanilla Latte", "category": "Coffee", "price": "5.20", "image_url": "https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=800&auto=format&fit=crop&q=80",
          "recipe": [("beans", 0.018, False), ("milk", 0.20, True), ("vanilla", 0.02, True), ("cups", 1.0, False), ("straws", 1.0, False)]},
-        {"name": "Cold Brew", "category": "Coffee", "price": "4.20", "image_url": "/assets/cold_brew.jpg",
+        {"name": "Cold Brew", "category": "Coffee", "price": "4.20", "image_url": "https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=800&auto=format&fit=crop&q=80",
          "recipe": [("beans", 0.020, False), ("cups", 1.0, False), ("straws", 1.0, False)]},
 
         # Iced Coffee
-        {"name": "Iced Caramel Macchiato", "category": "iced coffee", "price": "5.50", "image_url": "/assets/macchiato.jpg",
+        {"name": "Iced Caramel Macchiato", "category": "iced coffee", "price": "5.50", "image_url": "https://images.unsplash.com/photo-1485808191679-5f86510681a2?w=800&auto=format&fit=crop&q=80",
          "recipe": [("beans", 0.018, False), ("milk", 0.15, True), ("caramel", 0.02, True), ("ice", 0.1, True), ("cups", 1.0, False), ("straws", 1.0, False)]},
-        {"name": "Iced Matcha Latte", "category": "iced coffee", "price": "5.00", "image_url": "/assets/matcha.jpg",
+        {"name": "Iced Matcha Latte", "category": "iced coffee", "price": "5.00", "image_url": "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
          "recipe": [("oatmilk", 0.20, True), ("ice", 0.1, True), ("cups", 1.0, False), ("straws", 1.0, False)]},
 
         # Food and snacks
-        {"name": "Butter Croissant", "category": "food and snacks", "price": "3.80", "image_url": "/assets/croissant.jpg",
+        {"name": "Butter Croissant", "category": "food and snacks", "price": "3.80", "image_url": "https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=800&auto=format&fit=crop&q=80",
          "recipe": [("croissant", 1.0, False)]},
-        {"name": "Chocolate Pastry", "category": "food and snacks", "price": "4.20", "image_url": "/assets/choc_croissant.jpg",
+        {"name": "Chocolate Pastry", "category": "food and snacks", "price": "4.20", "image_url": "https://images.unsplash.com/photo-1608198093002-ad4e005484ec?w=800&auto=format&fit=crop&q=80",
          "recipe": [("choc_croissant", 1.0, False)]},
 
         # Alcoholic drinks
-        {"name": "Cold Beer Heineken", "category": "alcoholic drinks", "price": "4.50", "image_url": "https://images.unsplash.com/photo-1608270586620-248524c67de9?w=600&auto=format&fit=crop&q=80",
+        {"name": "Cold Beer Heineken", "category": "alcoholic drinks", "price": "4.50", "image_url": "https://images.unsplash.com/photo-1608270586620-248524c67de9?w=800&auto=format&fit=crop&q=80",
          "recipe": [("beer", 1.0, False)]},
-        {"name": "Red Wine Glass", "category": "alcoholic drinks", "price": "6.50", "image_url": "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=600&auto=format&fit=crop&q=80",
+        {"name": "Red Wine Glass", "category": "alcoholic drinks", "price": "6.50", "image_url": "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=800&auto=format&fit=crop&q=80",
          "recipe": [("wine", 0.2, False)]},
 
         # Platter
-        {"name": "French Fries Platter", "category": "platter", "price": "5.50", "image_url": "https://images.unsplash.com/photo-1576107232684-1279f390859f?w=600&auto=format&fit=crop&q=80",
+        {"name": "French Fries Platter", "category": "platter", "price": "5.50", "image_url": "https://images.unsplash.com/photo-1576107232684-1279f390859f?w=800&auto=format&fit=crop&q=80",
          "recipe": [("potatoes", 0.25, False), ("oil", 0.05, False), ("chili", 0.005, True)]},
 
         # Rice bowl
-        {"name": "Spicy Beef Rice Bowl", "category": "rice bowl", "price": "7.50", "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop&q=80",
+        {"name": "Spicy Beef Rice Bowl", "category": "rice bowl", "price": "7.50", "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&auto=format&fit=crop&q=80",
          "recipe": [("rice", 0.15, False), ("beef", 0.12, False), ("eggs", 1.0, True), ("chili", 0.005, True)]},
 
         # Rice meals
-        {"name": "Pork Belly Rice Meal", "category": "rice meals", "price": "8.00", "image_url": "https://images.unsplash.com/photo-1606787366850-de6330128bfc?w=600&auto=format&fit=crop&q=80",
+        {"name": "Pork Belly Rice Meal", "category": "rice meals", "price": "8.00", "image_url": "https://images.unsplash.com/photo-1606787366850-de6330128bfc?w=800&auto=format&fit=crop&q=80",
          "recipe": [("rice", 0.15, False), ("pork", 0.15, False), ("eggs", 1.0, True), ("soysauce", 0.02, True)]}
     ]
 

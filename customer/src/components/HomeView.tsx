@@ -1,7 +1,7 @@
 import { ArrowRight, Clock, Heart, Star } from 'lucide-react';
 import ProductCard from './ProductCard';
 import CategoryRail from './CategoryRail';
-import { categoriesFrom } from '../lib/catalog';
+import { CUSTOMIZATION_LEVELS, categoriesFrom } from '../lib/catalog';
 import type { Availability } from '../lib/catalog';
 import type { MenuItem, Order } from '../types';
 
@@ -97,7 +97,7 @@ export default function HomeView({
                 <dt className="hero__stat-label">Items on the menu</dt>
               </div>
               <div>
-                <dd className="hero__stat-value">4</dd>
+                <dd className="hero__stat-value">{CUSTOMIZATION_LEVELS.length}</dd>
                 <dt className="hero__stat-label">Ways to customise</dt>
               </div>
               <div>
