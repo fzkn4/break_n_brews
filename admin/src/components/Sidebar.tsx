@@ -5,7 +5,8 @@ import {
   Coffee, 
   ClipboardList, 
   PlusCircle, 
-  BarChart3 
+  BarChart3,
+  MessageSquare
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -13,13 +14,15 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   lowStockCount: number;
   pendingRequestsCount: number;
+  pendingReviewsCount: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
   activeTab, 
   setActiveTab, 
   lowStockCount, 
-  pendingRequestsCount 
+  pendingRequestsCount,
+  pendingReviewsCount
 }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -27,6 +30,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'menu', label: 'Manage Menu', icon: Coffee },
     { id: 'requests', label: 'Manage Requests', icon: ClipboardList, badge: pendingRequestsCount, badgeColor: 'bg-blue' },
     { id: 'stockin', label: 'Record Stock In', icon: PlusCircle },
+    { id: 'reviews', label: 'Reviews', icon: MessageSquare, badge: pendingReviewsCount, badgeColor: 'bg-blue' },
     { id: 'reports', label: 'View Reports', icon: BarChart3 }
   ];
 

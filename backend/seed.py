@@ -1,7 +1,7 @@
 import random
 from datetime import datetime, timedelta
 from decimal import Decimal
-from models import db, Staff, Ingredient, MenuItem, MenuItemIngredient, IngredientRequest, StockInLog, Order, OrderItem, Transaction
+from models import db, Staff, Ingredient, MenuItem, MenuItemIngredient, IngredientRequest, StockInLog, Order, OrderItem, Transaction, Review, Subscriber
 
 def seed_database():
     # Drop all tables and recreate them to ensure a fresh schema reset
@@ -236,6 +236,33 @@ def seed_database():
     for ing in Ingredient.query.all():
         if ing.name in initial_stocks:
             ing.stock_level = initial_stocks[ing.name]
+
+    db.session.commit()
+
+    # 8. Seed published reviews so the customer home page has a wall to show on a fresh install.
+    #    Guest submissions land unpublished and are approved from the admin portal.
+    reviews_data = [
+        ("Marisol Reyes", "Regular since 2021", 5,
+         "I order from the table and the drinks land before I have finished racking the balls. "
+         "The live tracker is the best part."),
+        ("Dan Villanueva", "Freelance designer", 5,
+         "Being able to dial the syrup down to \"Less\" without explaining it to anyone is why I keep "
+         "coming back here to work."),
+        ("Kat Ilagan", "League night captain", 4,
+         "We order platters for the whole table in one go and everything arrives together. "
+         "The kitchen keeps up even on a full house."),
+        ("Ramon Cruz", "Weekend regular", 5,
+         "The cold brew is consistent every single time, and the staff actually know what is in stock "
+         "before you order it."),
+    ]
+    for name, role, rating, comment in reviews_data:
+        db.session.add(Review(
+            customer_name=name, role=role, rating=rating, comment=comment, is_published=True
+        ))
+
+    # 9. A couple of newsletter signups so the admin list is not empty on a fresh install.
+    for email in ("marisol.reyes@example.com", "dan.villanueva@example.com"):
+        db.session.add(Subscriber(email=email))
 
     db.session.commit()
     print("Database seeding completed successfully!")

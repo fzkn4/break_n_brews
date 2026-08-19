@@ -8,8 +8,9 @@ import { ManageMenu } from './components/ManageMenu';
 import { ManageRequests } from './components/ManageRequests';
 import { RecordStockIn } from './components/RecordStockIn';
 import { Reports } from './components/Reports';
+import { ManageReviews } from './components/ManageReviews';
 import { Login } from './components/Login';
-import type { Ingredient, MenuItem, IngredientRequest, StockInLog, AnalyticsData, ReportData } from './types';
+import type { Ingredient, MenuItem, IngredientRequest, StockInLog, AnalyticsData, ReportData, Review, Subscriber } from './types';
 
 const API_URL = 'http://localhost:5000/api';
 
@@ -58,6 +59,8 @@ function App() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [requests, setRequests] = useState<IngredientRequest[]>([]);
   const [stockInLogs, setStockInLogs] = useState<StockInLog[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [analyticsDays, setAnalyticsDays] = useState<number>(7);
 
@@ -73,11 +76,13 @@ function App() {
   // Sync all core database lists
   const syncInventoryData = async (silent = false) => {
     try {
-      const [ingRes, menuRes, reqRes, stockRes, analyticsRes] = await Promise.all([
+      const [ingRes, menuRes, reqRes, stockRes, reviewRes, subRes, analyticsRes] = await Promise.all([
         fetch(`${API_URL}/ingredients`),
         fetch(`${API_URL}/menu`),
         fetch(`${API_URL}/requests`),
         fetch(`${API_URL}/stockin`),
+        fetch(`${API_URL}/reviews?all=1`),
+        fetch(`${API_URL}/subscribers`),
         fetch(`${API_URL}/analytics?days=${analyticsDays}`)
       ]);
 
@@ -85,6 +90,8 @@ function App() {
       if (menuRes.ok) setMenuItems(await menuRes.json());
       if (reqRes.ok) setRequests(await reqRes.json());
       if (stockRes.ok) setStockInLogs(await stockRes.json());
+      if (reviewRes.ok) setReviews(await reviewRes.json());
+      if (subRes.ok) setSubscribers(await subRes.json());
       if (analyticsRes.ok) setAnalyticsData(await analyticsRes.json());
       
       setLoading(false);
@@ -331,6 +338,41 @@ function App() {
   // Badges calculations for Sidebar nav items
   const lowStockCount = ingredients.filter(i => i.stock_level <= i.reorder_point).length;
   const pendingRequestsCount = requests.filter(r => r.status === 'pending').length;
+  const pendingReviewsCount = reviews.filter(r => !r.is_published).length;
+
+  // ------------ REVIEW HANDLERS ------------
+  const handlePublishReview = async (id: number, isPublished: boolean) => {
+    try {
+      const res = await fetch(`${API_URL}/reviews/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_published: isPublished })
+      });
+      if (res.ok) {
+        showToast(isPublished ? 'Review published to the storefront' : 'Review hidden from the storefront');
+        syncInventoryData();
+      } else {
+        showToast('Failed to update review', 'error');
+      }
+    } catch {
+      showToast('Network error updating review', 'error');
+    }
+  };
+
+  const handleDeleteReview = async (id: number) => {
+    if (!confirm('Delete this review permanently?')) return;
+    try {
+      const res = await fetch(`${API_URL}/reviews/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        showToast('Review deleted');
+        syncInventoryData();
+      } else {
+        showToast('Failed to delete review', 'error');
+      }
+    } catch {
+      showToast('Network error deleting review', 'error');
+    }
+  };
 
   if (!currentUser) {
     return (
@@ -365,6 +407,7 @@ function App() {
           }} 
           lowStockCount={lowStockCount}
           pendingRequestsCount={pendingRequestsCount}
+          pendingReviewsCount={pendingReviewsCount}
         />
       </div>
 
@@ -427,6 +470,15 @@ function App() {
             stockInLogs={stockInLogs}
             ingredients={ingredients}
             onRecordStockIn={handleRecordStockIn}
+          />
+        )}
+
+        {activeTab === 'reviews' && (
+          <ManageReviews
+            reviews={reviews}
+            subscribers={subscribers}
+            onPublishReview={handlePublishReview}
+            onDeleteReview={handleDeleteReview}
           />
         )}
 

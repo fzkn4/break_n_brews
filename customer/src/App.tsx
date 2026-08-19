@@ -9,6 +9,7 @@ import ProductSheet from './components/ProductSheet';
 import Footer from './components/Footer';
 import Toaster from './components/Toaster';
 import type { ToastMessage } from './components/Toaster';
+import type { ReviewDraft } from './components/ReviewForm';
 import {
   API_URL,
   availabilityOf,
@@ -25,6 +26,7 @@ import type {
   MenuItem,
   Order,
   OrderMeta,
+  Review,
   View
 } from './types';
 import { ShoppingBag } from 'lucide-react';
@@ -79,6 +81,14 @@ function App() {
     readStore<Record<number, OrderMeta>>(STORAGE_KEYS.orderMeta, {})
   );
 
+  // ----- Reviews -----------------------------------------------------------
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewedOrders, setReviewedOrders] = useState<number[]>(() =>
+    readStore<number[]>(STORAGE_KEYS.reviewedOrders, [])
+  );
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
   // ----- Toasts ------------------------------------------------------------
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const toastId = useRef(0);
@@ -95,6 +105,7 @@ function App() {
   useEffect(() => writeStore(STORAGE_KEYS.checkout, details), [details]);
   useEffect(() => writeStore(STORAGE_KEYS.orderHistory, historyIds), [historyIds]);
   useEffect(() => writeStore(STORAGE_KEYS.orderMeta, orderMeta), [orderMeta]);
+  useEffect(() => writeStore(STORAGE_KEYS.reviewedOrders, reviewedOrders), [reviewedOrders]);
 
   // ----- Catalog fetching --------------------------------------------------
   const loadCatalog = useCallback(async () => {
@@ -122,6 +133,20 @@ function App() {
     const timer = setInterval(loadCatalog, MENU_POLL_MS);
     return () => clearInterval(timer);
   }, [loadCatalog]);
+
+  /** Published reviews only — the endpoint hides anything an admin has not approved. */
+  const loadReviews = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/reviews?limit=6`);
+      if (res.ok) setReviews(await res.json());
+    } catch {
+      /* the wall simply stays empty */
+    }
+  }, []);
+
+  useEffect(() => {
+    loadReviews();
+  }, [loadReviews]);
 
   // ----- Order polling -----------------------------------------------------
   const fetchOrder = useCallback(async (orderId: number): Promise<Order | null> => {
@@ -352,6 +377,46 @@ function App() {
     notify(skipped > 0 ? `${skipped} item(s) are no longer available and were skipped.` : 'Order rebuilt in your cart');
   };
 
+  const subscribe = async (email: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_URL}/subscribers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      if (res.ok) return true;
+      const body = await res.json().catch(() => null);
+      notify(body?.error ?? 'That did not go through. Try again in a moment.', 'error');
+    } catch {
+      notify('We could not reach the counter. Check your connection.', 'error');
+    }
+    return false;
+  };
+
+  const submitReview = async (order: Order, draft: ReviewDraft) => {
+    setReviewSubmitting(true);
+    setReviewError(null);
+    try {
+      const res = await fetch(`${API_URL}/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...draft, order_id: order.id })
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setReviewError(body?.error ?? 'We could not send that review. Try again.');
+        return;
+      }
+      setReviewedOrders((current) => [...new Set([...current, order.id])]);
+      notify('Thanks! Your review is with the team.');
+      loadReviews();
+    } catch {
+      setReviewError('We could not reach the counter. Check your connection and try again.');
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
   const startNewOrder = () => {
     setActiveOrderId(null);
     browse();
@@ -390,11 +455,13 @@ function App() {
             loading={loading}
             favorites={favorites}
             liveOrder={liveOrder}
+            reviews={reviews}
             availabilityFor={availabilityFor}
             onOpen={setSheetItem}
             onToggleFavorite={toggleFavorite}
             onBrowse={browse}
             onTrack={() => goTo('tracker')}
+            onSubscribe={subscribe}
           />
         )}
 
@@ -424,6 +491,10 @@ function App() {
             onBrowse={() => browse()}
             onReorder={reorder}
             onStartNew={startNewOrder}
+            reviewed={activeOrder ? reviewedOrders.includes(activeOrder.id) : false}
+            reviewSubmitting={reviewSubmitting}
+            reviewError={reviewError}
+            onSubmitReview={submitReview}
           />
         )}
       </main>

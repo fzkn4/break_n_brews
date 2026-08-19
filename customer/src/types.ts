@@ -57,6 +57,23 @@ export interface Order {
   items: OrderItem[];
 }
 
+export interface Review {
+  id: number;
+  customer_name: string;
+  role: string | null;
+  rating: number;
+  comment: string;
+  is_published: boolean;
+  order_id: number | null;
+  created_at: string;
+}
+
+export interface Subscriber {
+  id: number;
+  email: string;
+  created_at: string;
+}
+
 // ----- Client-only shapes -----
 
 export type CustomizationLevel = 'None' | 'Less' | 'Regular' | 'Extra';
