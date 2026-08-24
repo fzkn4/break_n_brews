@@ -10,7 +10,7 @@ npm run build    # tsc -b && vite build
 npm run lint     # oxlint
 ```
 
-It talks to the Flask API at `http://localhost:5000/api` (`API_URL` in `src/lib/catalog.ts`), so the
+It talks to the Flask API at `http://localhost:5001/api` (`API_URL` in `src/lib/catalog.ts`), so the
 backend must be running. `docker compose up` from the repo root starts everything together.
 
 ## Layout
