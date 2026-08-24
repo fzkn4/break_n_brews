@@ -44,7 +44,7 @@ function App() {
       const [ingRes, ordersRes, menuRes] = await Promise.all([
         fetch(`${API_URL}/ingredients`),
         fetch(`${API_URL}/orders`),
-        fetch(`${API_URL}/menu_items`)
+        fetch(`${API_URL}/menu`)
       ]);
 
       if (ingRes.ok) setIngredients(await ingRes.json());
