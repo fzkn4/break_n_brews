@@ -10,7 +10,14 @@ app = Flask(__name__)
 app.config.from_object(Config)
 
 # Enable CORS for frontend requests
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers.setdefault('Access-Control-Allow-Origin', '*')
+    response.headers.setdefault('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.setdefault('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,PATCH')
+    return response
 
 # Initialize database
 db.init_app(app)

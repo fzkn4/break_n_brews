@@ -12,7 +12,7 @@ import { ManageReviews } from './components/ManageReviews';
 import { Login } from './components/Login';
 import type { Ingredient, MenuItem, IngredientRequest, StockInLog, AnalyticsData, ReportData, Review, Subscriber } from './types';
 
-const API_URL = 'http://localhost:5000/api';
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 function App() {
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string; role: string } | null>(() => {

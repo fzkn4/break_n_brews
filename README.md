@@ -19,7 +19,7 @@ docker compose up --build
 | Admin Portal | http://localhost:5173 |
 | Staff Portal | http://localhost:5174 |
 | Customer Portal | http://localhost:5176 |
-| API | http://localhost:5000/api |
+| API | http://localhost:5001/api |
 | PostgreSQL | `localhost:5434` (container-side 5432) |
 
 The database is created and seeded automatically on first start, and **left alone on every start after

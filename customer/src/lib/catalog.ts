@@ -13,7 +13,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { CartItem, CustomizationLevel, Ingredient, MenuItem } from '../types';
 
-export const API_URL = 'http://localhost:5000/api';
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 /** Kept in sync with the multiplier table in backend/app.py `place_order()`. */
 export const CUSTOMIZATION_LEVELS: CustomizationLevel[] = ['None', 'Less', 'Regular', 'Extra'];

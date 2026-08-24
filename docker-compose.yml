@@ -4,10 +4,10 @@
 #   docker compose up --build
 #
 # Admin http://localhost:5173 · Staff http://localhost:5174 · Customer http://localhost:5176
-# API   http://localhost:5000/api
+# API   http://localhost:5001/api
 #
-# The portals hardcode API_URL = http://localhost:5000/api and run in the
-# browser, so the API must stay published on host port 5000.
+# The portals target API_URL = http://localhost:5001/api and run in the
+# browser, so the API is published on host port 5001 (avoiding Windows port 5000 conflicts).
 
 services:
   db:
@@ -40,7 +40,7 @@ services:
       # Set to 1 to wipe and re-seed on the next start.
       SEED_ON_START: ${SEED_ON_START:-0}
     ports:
-      - "5000:5000"
+      - "${API_PORT:-5001}:5000"
     volumes:
       # Hot reload: Flask's debug reloader picks up edits to the mounted source.
       - ./backend:/app
