@@ -10,8 +10,16 @@ export const STORAGE_KEYS = {
   reviewedOrders: 'bb_reviewed_orders',
   menuItems: 'bb_customer_menu_items',
   ingredients: 'bb_customer_ingredients',
-  reviews: 'bb_customer_reviews'
+  reviews: 'bb_customer_reviews',
+  menuUpdates: 'bb_menu_updates'
 } as const;
+
+/** What this device answered to the "new menu" email prompt. */
+export interface MenuUpdatesChoice {
+  status: 'subscribed' | 'dismissed';
+  email?: string;
+  at: number;
+}
 
 export function readStore<T>(key: string, fallback: T): T {
   try {

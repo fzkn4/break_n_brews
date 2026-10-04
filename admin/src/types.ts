@@ -143,7 +143,18 @@ export interface Review {
 export interface Subscriber {
   id: number;
   email: string;
+  name: string | null;
+  source: 'footer' | 'post_order' | null;
+  is_active: boolean;
+  unsubscribed_at: string | null;
   created_at: string;
+}
+
+/** Returned on a newly created menu item when the admin asked to email subscribers. */
+export interface AnnouncementResult {
+  status: 'queued' | 'skipped' | 'sent' | 'failed';
+  error: string | null;
+  recipient_count: number;
 }
 
 export type OrderStatus = 'pending' | 'preparing' | 'completed' | 'cancelled';
@@ -187,7 +198,7 @@ export interface NotificationRecipient {
 
 export interface EmailLogEntry {
   id: number;
-  kind: 'low_stock' | 'daily_report' | 'test';
+  kind: 'low_stock' | 'daily_report' | 'test' | 'new_menu';
   subject: string;
   recipients: string[];
   status: 'queued' | 'sent' | 'failed' | 'skipped';

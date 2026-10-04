@@ -10,6 +10,8 @@ import Footer from './components/Footer';
 import Toaster from './components/Toaster';
 import type { ToastMessage } from './components/Toaster';
 import type { ReviewDraft } from './components/ReviewForm';
+import MenuUpdatesPrompt from './components/MenuUpdatesPrompt';
+import type { SubscribeStatus } from './components/MenuUpdatesPrompt';
 import {
   API_URL,
   availabilityOf,
@@ -22,6 +24,7 @@ import {
   stockMapFrom
 } from './lib/catalog';
 import { readStore, writeStore, clearStore, STORAGE_KEYS } from './lib/storage';
+import type { MenuUpdatesChoice } from './lib/storage';
 import { hydrateAndMergeMenuItems } from './lib/menuStorage';
 import type {
   CartItem,
@@ -52,6 +55,21 @@ const DEFAULT_DETAILS: CheckoutDetails = {
 function readQrTable(): string | null {
   const raw = new URLSearchParams(window.location.search).get('table')?.trim() ?? '';
   return /^[A-Za-z0-9-]{1,12}$/.test(raw) ? raw : null;
+}
+
+// Ask again a month after "No thanks", never again once subscribed (until they clear it).
+const MENU_UPDATES_REASK_MS = 30 * 24 * 60 * 60 * 1000;
+
+function showMenuUpdatesPrompt(
+  choice: MenuUpdatesChoice | null,
+  confirmedThisVisit: SubscribeStatus | null,
+  order: Order | null
+): boolean {
+  if (!order || order.status === 'cancelled') return false;
+  if (confirmedThisVisit) return true;
+  if (choice?.status === 'subscribed') return false;
+  if (choice?.status === 'dismissed' && Date.now() - choice.at < MENU_UPDATES_REASK_MS) return false;
+  return true;
 }
 
 function App() {
@@ -109,6 +127,13 @@ function App() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
 
+  // ----- New-menu email list -----------------------------------------------
+  const [menuUpdates, setMenuUpdates] = useState<MenuUpdatesChoice | null>(() =>
+    readStore<MenuUpdatesChoice | null>(STORAGE_KEYS.menuUpdates, null)
+  );
+  // Only for this visit: keeps the thank-you on screen after signing up from the tracker.
+  const [updatesConfirmed, setUpdatesConfirmed] = useState<SubscribeStatus | null>(null);
+
   // ----- Toasts ------------------------------------------------------------
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const toastId = useRef(0);
@@ -131,6 +156,7 @@ function App() {
   useEffect(() => writeStore(STORAGE_KEYS.menuItems, menuItems), [menuItems]);
   useEffect(() => writeStore(STORAGE_KEYS.ingredients, ingredients), [ingredients]);
   useEffect(() => writeStore(STORAGE_KEYS.reviews, reviews), [reviews]);
+  useEffect(() => writeStore(STORAGE_KEYS.menuUpdates, menuUpdates), [menuUpdates]);
 
   // ----- Catalog fetching --------------------------------------------------
   const loadCatalog = useCallback(async () => {
@@ -222,6 +248,27 @@ function App() {
 
   // ----- Derived -----------------------------------------------------------
   const menuById = useMemo(() => new Map(menuItems.map((item) => [item.id, item])), [menuItems]);
+
+  // "See it on the menu" links in new-menu emails land on ?item=<id>: open that product once it loads.
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandled.current || menuItems.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const id = Number(params.get('item'));
+    if (!id) return;
+    deepLinkHandled.current = true;
+    const item = menuById.get(id);
+    if (item && !item.stock_paused) {
+      setView('menu');
+      setSheetItem(item);
+    } else {
+      notify('That item is not available right now. Here is everything else on the menu.', 'info');
+      setView('menu');
+    }
+    params.delete('item');
+    const query = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+  }, [menuItems.length, menuById, notify]);
   const stock = useMemo(() => stockMapFrom(ingredients), [ingredients]);
   const reserved = useMemo(() => reservedByCart(cart, menuById), [cart, menuById]);
 
@@ -433,20 +480,43 @@ function App() {
     notify(skipped > 0 ? `${skipped} item(s) are no longer available and were skipped.` : 'Order rebuilt in your cart');
   };
 
-  const subscribe = async (email: string): Promise<boolean> => {
+  const subscribe = async (
+    email: string,
+    source: 'footer' | 'post_order' = 'footer',
+    name?: string
+  ): Promise<SubscribeStatus | null> => {
     try {
       const res = await fetch(`${API_URL}/subscribers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email, source, name: name || null })
       });
-      if (res.ok) return true;
       const body = await res.json().catch(() => null);
+      if (res.ok) {
+        setMenuUpdates({ status: 'subscribed', email: body?.email ?? email, at: Date.now() });
+        return (body?.status as SubscribeStatus) ?? 'subscribed';
+      }
       notify(body?.error ?? 'That did not go through. Try again in a moment.', 'error');
     } catch {
       notify('We could not reach the counter. Check your connection.', 'error');
     }
-    return false;
+    return null;
+  };
+
+  const subscribeFromTracker = async (email: string, name?: string) => {
+    const status = await subscribe(email, 'post_order', name);
+    if (status) setUpdatesConfirmed(status);
+    return status;
+  };
+
+  const dismissMenuUpdates = () => {
+    setMenuUpdates({ status: 'dismissed', at: Date.now() });
+    notify('No problem. You can still sign up from the bottom of the home page.', 'info');
+  };
+
+  const resetMenuUpdates = () => {
+    setMenuUpdates(null);
+    setUpdatesConfirmed(null);
   };
 
   const submitReview = async (order: Order, draft: ReviewDraft) => {
@@ -524,7 +594,7 @@ function App() {
             onToggleFavorite={toggleFavorite}
             onBrowse={browse}
             onTrack={() => goTo('tracker')}
-            onSubscribe={subscribe}
+            onSubscribe={async (email) => Boolean(await subscribe(email, 'footer'))}
           />
         )}
 
@@ -558,6 +628,20 @@ function App() {
             reviewSubmitting={reviewSubmitting}
             reviewError={reviewError}
             onSubmitReview={submitReview}
+            afterOrder={
+              showMenuUpdatesPrompt(menuUpdates, updatesConfirmed, activeOrder ?? history[0] ?? null) && (
+                <MenuUpdatesPrompt
+                  confirmedEmail={updatesConfirmed ? menuUpdates?.email ?? null : null}
+                  confirmedStatus={updatesConfirmed}
+                  onSubscribe={(email) => {
+                    const order = activeOrder ?? history[0];
+                    return subscribeFromTracker(email, order ? orderMeta[order.id]?.name : undefined);
+                  }}
+                  onDismiss={dismissMenuUpdates}
+                  onUseDifferentEmail={resetMenuUpdates}
+                />
+              )
+            }
           />
         )}
       </main>

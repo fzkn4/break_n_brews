@@ -7,7 +7,13 @@ interface ManageReviewsProps {
   subscribers: Subscriber[];
   onPublishReview: (id: number, isPublished: boolean) => void;
   onDeleteReview: (id: number) => void;
+  onDeleteSubscriber: (id: number) => void;
 }
+
+const SOURCE_LABEL: Record<string, string> = {
+  post_order: 'After ordering',
+  footer: 'Website footer'
+};
 
 type Filter = 'pending' | 'published' | 'all';
 
@@ -15,8 +21,14 @@ export const ManageReviews: React.FC<ManageReviewsProps> = ({
   reviews,
   subscribers,
   onPublishReview,
-  onDeleteReview
+  onDeleteReview,
+  onDeleteSubscriber
 }) => {
+  const [subscriberSearch, setSubscriberSearch] = useState('');
+  const activeSubscribers = subscribers.filter(s => s.is_active).length;
+  const visibleSubscribers = subscribers.filter(s =>
+    `${s.email} ${s.name ?? ''}`.toLowerCase().includes(subscriberSearch.trim().toLowerCase())
+  );
   // Pending first: an unapproved review is the only thing on this screen that needs a decision.
   const [filter, setFilter] = useState<Filter>('pending');
 
@@ -69,8 +81,8 @@ export const ManageReviews: React.FC<ManageReviewsProps> = ({
         <div className="glass-card" style={styles.statCard}>
           <Mail size={18} color="var(--accent-primary)" />
           <div>
-            <span style={styles.statValue}>{subscribers.length}</span>
-            <span style={styles.statLabel}>Newsletter signups</span>
+            <span style={styles.statValue}>{activeSubscribers}</span>
+            <span style={styles.statLabel}>Menu-update subscribers</span>
           </div>
         </div>
       </div>
@@ -154,20 +166,64 @@ export const ManageReviews: React.FC<ManageReviewsProps> = ({
       )}
 
       <div className="glass-card" style={styles.subscriberBox}>
-        <h3 style={styles.subTitle}>
-          <Mail size={16} /> Newsletter subscribers ({subscribers.length})
-        </h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <h3 style={styles.subTitle}>
+              <Mail size={16} /> Menu-update subscribers
+            </h3>
+            <span style={styles.meta}>
+              {activeSubscribers} active · {subscribers.length - activeSubscribers} unsubscribed. Tick “Announce it to
+              subscribers” when you add a menu item to email them.
+            </span>
+          </div>
+          {subscribers.length > 6 && (
+            <input
+              className="glass-input"
+              placeholder="Search email or name"
+              value={subscriberSearch}
+              onChange={(e) => setSubscriberSearch(e.target.value)}
+              style={{ minWidth: 220 }}
+            />
+          )}
+        </div>
         {subscribers.length === 0 ? (
           <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            No signups yet.
+            No signups yet. Guests are invited to join right after they place an order.
           </p>
         ) : (
-          <div style={styles.chipWrap}>
-            {subscribers.map(sub => (
-              <span key={sub.id} style={styles.emailChip}>
-                {sub.email}
-              </span>
+          <div style={styles.subList}>
+            {visibleSubscribers.map(sub => (
+              <div key={sub.id} style={{ ...styles.subRow, opacity: sub.is_active ? 1 : 0.6 }}>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', wordBreak: 'break-all' }}>{sub.email}</div>
+                  <div style={styles.meta}>
+                    {sub.name ? `${sub.name} · ` : ''}
+                    {SOURCE_LABEL[sub.source ?? ''] ?? 'Signed up'} ·{' '}
+                    {new Date(sub.created_at + 'Z').toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </div>
+                </div>
+                <span
+                  style={{
+                    ...styles.statusBadge,
+                    backgroundColor: sub.is_active ? 'rgba(16,185,129,0.12)' : 'var(--surface-muted)',
+                    color: sub.is_active ? '#10b981' : 'var(--text-muted)'
+                  }}
+                >
+                  {sub.is_active ? 'Subscribed' : 'Unsubscribed'}
+                </span>
+                <button
+                  className="menu-btn-delete"
+                  onClick={() => onDeleteSubscriber(sub.id)}
+                  aria-label={`Remove ${sub.email}`}
+                  title="Remove from the list"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             ))}
+            {visibleSubscribers.length === 0 && (
+              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>No match.</p>
+            )}
           </div>
         )}
       </div>
@@ -308,17 +364,18 @@ const styles = {
     fontWeight: '700',
     color: 'var(--text-primary)'
   },
-  chipWrap: {
+  subList: {
     display: 'flex',
-    flexWrap: 'wrap' as const,
-    gap: '8px'
+    flexDirection: 'column' as const,
+    maxHeight: '420px',
+    overflowY: 'auto' as const
   },
-  emailChip: {
-    padding: '5px 12px',
-    borderRadius: '999px',
-    backgroundColor: 'var(--surface-muted)',
-    border: '1px solid var(--border-glass)',
-    fontSize: '0.82rem',
-    color: 'var(--text-primary)'
+  subRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '10px 4px',
+    borderBottom: '1px solid var(--table-border)',
+    flexWrap: 'wrap' as const
   }
 };
