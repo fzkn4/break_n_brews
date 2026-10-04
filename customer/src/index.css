@@ -1929,3 +1929,138 @@ img { display: block; max-width: 100%; }
     scroll-behavior: auto !important;
   }
 }
+
+/* --------------------------------------------------------------------------
+   New-menu email prompt (order tracker)
+   -------------------------------------------------------------------------- */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.updates-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 22px 24px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(circle at 100% 0%, var(--accent-soft), transparent 55%),
+    var(--card-bg);
+  box-shadow: var(--shadow-sm);
+  /* Arrives a beat after the order confirmation so it never competes with it. */
+  animation: updates-in 0.6s var(--ease) 0.5s both;
+}
+
+@keyframes updates-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.updates-card--done {
+  background: var(--success-bg);
+  border-color: rgba(78, 124, 89, 0.28);
+  animation-delay: 0s;
+}
+
+.updates-card__icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+}
+
+.updates-card__icon--done {
+  background: rgba(78, 124, 89, 0.16);
+  color: var(--success);
+}
+
+.updates-card__copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.updates-card__title {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  padding-right: 96px; /* room for "No thanks" */
+}
+
+.updates-card--done .updates-card__title { padding-right: 0; }
+
+.updates-card__text {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.updates-card__row {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.updates-card__row .form-input { flex: 1; min-width: 0; }
+.updates-card__row .btn { flex-shrink: 0; }
+
+.updates-card__dismiss {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: all 0.2s var(--ease);
+}
+
+.updates-card__dismiss:hover { color: var(--accent-primary); background: var(--accent-softer); }
+
+.updates-card__link {
+  align-self: flex-start;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 520px) {
+  .updates-card { flex-direction: column; padding: 20px; }
+  .updates-card__title { padding-right: 0; }
+  .updates-card__row { flex-direction: column; }
+  .updates-card__row .btn { width: 100%; justify-content: center; }
+  .updates-card__dismiss { top: 18px; right: 12px; }
+  .updates-card__dismiss span { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .updates-card { animation: none; }
+}

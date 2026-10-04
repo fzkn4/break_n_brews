@@ -36,7 +36,8 @@ type SettingsPatch = Partial<
 const KIND_LABEL: Record<EmailLogEntry['kind'], string> = {
   low_stock: 'Low stock',
   daily_report: 'Daily report',
-  test: 'Test'
+  test: 'Test',
+  new_menu: 'New menu'
 };
 
 function timeZones(current: string): string[] {

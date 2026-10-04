@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Edit2, Trash2, X, Eye, EyeOff, Filter, Coffee, ImagePlus } from 'lucide-react';
 import type { MenuItem, Ingredient } from '../types';
+import { MenuAnnouncement } from './MenuAnnouncement';
+import type { AnnouncementDraft } from './MenuAnnouncement';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 const SIZE_CHOICES = ['Small', 'Regular', 'Large'] as const;
@@ -98,6 +100,8 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
   const [offeredSizes, setOfferedSizes] = useState<SizeChoice[]>([]);
   const [sizesTouched, setSizesTouched] = useState(false);
   const [newIngredientId, setNewIngredientId] = useState<number | ''>('');
+  const [announceEnabled, setAnnounceEnabled] = useState(false);
+  const [announceNote, setAnnounceNote] = useState('');
   const offersSizes = offeredSizes.length > 0;
 
   // Categories are whatever the menu in the database actually uses — no fixed list to fall behind.
@@ -121,11 +125,15 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
     setOfferedSizes(isSizeableCategory(categories[0] ?? '') ? [...SIZE_CHOICES] : []);
     setSizesTouched(false);
     setNewIngredientId('');
+    setAnnounceEnabled(false);
+    setAnnounceNote('');
     setShowModal(true);
   };
 
   const startEdit = (item: MenuItem) => {
     setEditItem(item);
+    setAnnounceEnabled(false);
+    setAnnounceNote('');
     setName(item.name);
     setCategory(item.category);
     const baseP = item.price;
@@ -302,9 +310,29 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
     if (editItem) {
       onUpdateMenuItem(editItem.id, payload);
     } else {
-      onCreateMenuItem(payload);
+      onCreateMenuItem(
+        announceEnabled ? { ...payload, announce: { enabled: true, note: announceNote.trim() } } : payload
+      );
     }
     setShowModal(false);
+  };
+
+  const buildAnnouncementDraft = (): AnnouncementDraft => {
+    const num = (value: string) => (value && !isNaN(parseFloat(value)) ? parseFloat(value) : null);
+    return {
+      name,
+      category,
+      price: (offersSizes ? num(priceMedium) ?? num(priceSmall) ?? num(priceLarge) : num(price)) ?? 0,
+      price_small: offeredSizes.includes('Small') ? num(priceSmall) : null,
+      price_medium: offeredSizes.includes('Regular') ? num(priceMedium) : null,
+      price_large: offeredSizes.includes('Large') ? num(priceLarge) : null,
+      offered_sizes: offeredSizes,
+      image_url: imageUrl || null,
+      made_with: selectedIngredients
+        .map((row) => ingredients.find((i) => i.id === row.ingredient_id))
+        .filter((ing): ing is Ingredient => Boolean(ing) && ing!.category !== 'Packaging')
+        .map((ing) => ing.name)
+    };
   };
 
   const toggleAvailability = (item: MenuItem) => {
@@ -815,6 +843,17 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
                 </label>
               </div>
 
+              <MenuAnnouncement
+                mode={editItem ? 'edit' : 'create'}
+                itemId={editItem?.id}
+                isAvailable={isAvailable}
+                enabled={announceEnabled}
+                onEnabledChange={setAnnounceEnabled}
+                note={announceNote}
+                onNoteChange={setAnnounceNote}
+                buildDraft={buildAnnouncementDraft}
+              />
+
               <div style={styles.modalActions}>
                 <button 
                   type="button" 
@@ -824,7 +863,7 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  {editItem ? 'Save Updates' : 'Add to Menu'}
+                  {editItem ? 'Save Updates' : announceEnabled ? 'Add & Announce' : 'Add to Menu'}
                 </button>
               </div>
             </form>

@@ -12,7 +12,7 @@ import { ManageReviews } from './components/ManageReviews';
 import { TableQrCodes } from './components/TableQrCodes';
 import { EmailNotifications } from './components/EmailNotifications';
 import { Login } from './components/Login';
-import type { Ingredient, MenuItem, IngredientRequest, StockInLog, AnalyticsData, ReportData, Review, Subscriber, Order } from './types';
+import type { Ingredient, MenuItem, IngredientRequest, StockInLog, AnalyticsData, ReportData, Review, Subscriber, Order, AnnouncementResult } from './types';
 import { hydrateAndMergeMenuItems, saveCustomMenuItem, removeCustomMenuItem, getCustomMenuItems, getDeletedMenuItemIds } from './lib/menuStorage';
 import { STORAGE_KEYS, readStore, writeStore } from './lib/storage';
 
@@ -91,7 +91,8 @@ function App() {
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    // Longer messages (e.g. why an email was not sent) stay up long enough to read.
+    setTimeout(() => setToast(null), Math.min(8000, Math.max(3000, message.length * 60)));
   };
 
   // Sync all core database lists
@@ -272,9 +273,15 @@ function App() {
         body: JSON.stringify(data)
       });
       if (res.ok) {
-        const createdItem: MenuItem = await res.json();
+        const { announcement, ...createdItem }: MenuItem & { announcement?: AnnouncementResult } = await res.json();
         saveCustomMenuItem(createdItem);
-        showToast('Menu item added successfully');
+        if (announcement?.status === 'skipped') {
+          showToast(`Added "${createdItem.name}", but subscribers were not emailed: ${announcement.error}`, 'error');
+        } else if (announcement) {
+          showToast(`Added "${createdItem.name}" and emailing ${announcement.recipient_count} subscriber(s)`);
+        } else {
+          showToast('Menu item added successfully');
+        }
         await syncInventoryData(true);
       } else {
         const err = await res.json();
@@ -433,6 +440,22 @@ function App() {
     }
   };
 
+  const handleDeleteSubscriber = async (id: number) => {
+    const sub = subscribers.find(s => s.id === id);
+    if (!confirm(`Remove ${sub?.email ?? 'this subscriber'} from the list? They will not get new-menu emails.`)) return;
+    try {
+      const res = await fetch(`${API_URL}/subscribers/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        showToast('Subscriber removed');
+        syncInventoryData();
+      } else {
+        showToast('Failed to remove subscriber', 'error');
+      }
+    } catch {
+      showToast('Network error removing subscriber', 'error');
+    }
+  };
+
   const handleDeleteReview = async (id: number) => {
     if (!confirm('Delete this review permanently?')) return;
     try {
@@ -550,6 +573,7 @@ function App() {
             subscribers={subscribers}
             onPublishReview={handlePublishReview}
             onDeleteReview={handleDeleteReview}
+            onDeleteSubscriber={handleDeleteSubscriber}
           />
         )}
 

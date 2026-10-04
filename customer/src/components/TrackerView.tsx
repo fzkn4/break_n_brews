@@ -16,6 +16,8 @@ interface TrackerViewProps {
   reviewSubmitting: boolean;
   reviewError: string | null;
   onSubmitReview: (order: Order, draft: ReviewDraft) => void;
+  /** Rendered right under the order card, e.g. the new-menu email prompt. */
+  afterOrder?: React.ReactNode;
 }
 
 const STEPS: { status: OrderStatus; label: string; hint: string; Icon: typeof Check }[] = [
@@ -54,7 +56,8 @@ export default function TrackerView({
   reviewed,
   reviewSubmitting,
   reviewError,
-  onSubmitReview
+  onSubmitReview,
+  afterOrder
 }: TrackerViewProps) {
   if (!order) {
     return (
@@ -214,6 +217,8 @@ export default function TrackerView({
             </button>
           </div>
         </div>
+
+        {afterOrder}
 
         {order.status === 'completed' &&
           (reviewed ? (

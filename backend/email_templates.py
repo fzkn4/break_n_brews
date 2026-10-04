@@ -25,7 +25,7 @@ def admin_url() -> str:
     return (os.getenv('ADMIN_PORTAL_URL') or 'http://localhost:5173').rstrip('/')
 
 
-def layout(title: str, preheader: str, body: str, footer_note: str = '') -> str:
+def layout(title: str, preheader: str, body: str, footer_note: str = '', footer_html: str = '') -> str:
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{escape(title)}</title></head>
@@ -42,8 +42,10 @@ def layout(title: str, preheader: str, body: str, footer_note: str = '') -> str:
       {body}
     </td></tr>
     <tr><td style="padding:16px 8px;color:{MUTED};font-size:12px;text-align:center;line-height:1.5;">
-      {footer_note or 'Sent automatically by the Break &amp; Brews management system.'}<br>
-      Manage who receives these emails under <b>Email Notifications</b> in the admin portal.
+      {footer_html or (
+          (footer_note or 'Sent automatically by the Break &amp; Brews management system.')
+          + '<br>Manage who receives these emails under <b>Email Notifications</b> in the admin portal.'
+      )}
     </td></tr>
   </table>
 </td></tr></table></body></html>"""
@@ -165,3 +167,51 @@ def test_email(sender_masked: str):
     text = ('Your Break & Brews system can send email. Low-stock alerts and the end-of-day sales '
             'report will arrive at this address.')
     return subject, layout('Email notifications are set up', subject, body), text
+
+
+# ------------------------------------------------------------------ new menu
+
+def new_menu_email(item: dict, note: str, menu_url: str, unsubscribe_url: str):
+    """Customer-facing announcement. item: name, category, price_label, image_url, made_with."""
+    name = item['name']
+    subject = f'New at Break & Brews: {name}'
+    preheader = (note or f'{name} just landed on the menu. Come try it.')[:140]
+
+    image = ''
+    if item.get('image_url', '').startswith(('http://', 'https://')):
+        image = (f'<img src="{escape(item["image_url"])}" alt="{escape(name)}" width="552" '
+                 f'style="display:block;width:100%;max-width:552px;height:auto;border-radius:12px;margin:0 0 20px;">')
+    made_with = ''
+    if item.get('made_with'):
+        made_with = (f'<p style="font-size:14px;color:{MUTED};margin:0 0 16px;">Made with '
+                     f'{escape(item["made_with"])}</p>')
+    note_html = ''
+    if note:
+        note_html = (f'<div style="margin:0 0 20px;padding:14px 16px;border-left:4px solid {ACCENT};background:{CREAM};'
+                     f'border-radius:0 10px 10px 0;font-size:15px;line-height:1.6;">{escape(note)}</div>')
+
+    body = (
+        f'{image}'
+        f'<div style="font-size:12px;font-weight:700;letter-spacing:2px;color:{ACCENT};">NEW ON THE MENU</div>'
+        f'<h1 style="font-size:28px;line-height:1.2;margin:6px 0 4px;">{escape(name)}</h1>'
+        f'<p style="font-size:15px;margin:0 0 14px;color:{MUTED};">{escape(item.get("category") or "")}'
+        f'{" · " if item.get("category") else ""}<b style="color:#2b1d16;">{escape(item["price_label"])}</b></p>'
+        f'{made_with}{note_html}'
+        f'<div>{button("See it on the menu", menu_url)}</div>'
+        f'<p style="font-size:14px;line-height:1.6;margin:20px 0 0;">Order from your table by scanning the QR code, '
+        f'or ask at the counter. See you soon!</p>'
+    )
+    footer = (
+        'You are getting this because you asked Break &amp; Brews to tell you about new menu items.<br>'
+        f'<a href="{escape(unsubscribe_url)}" style="color:{MUTED};">Unsubscribe</a> with one click, any time.'
+    )
+    html = layout('Something new just landed', preheader, body, footer_html=footer)
+
+    lines = [f'New on the menu at Break & Brews: {name}',
+             f'{item.get("category") or ""} · {item["price_label"]}'.strip(' ·')]
+    if item.get('made_with'):
+        lines.append(f'Made with {item["made_with"]}')
+    if note:
+        lines += ['', note]
+    lines += ['', f'See it on the menu: {menu_url}', '', f'Unsubscribe: {unsubscribe_url}']
+    return subject, html, '\n'.join(lines)

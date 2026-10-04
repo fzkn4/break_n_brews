@@ -64,8 +64,12 @@ def recipients_for(kind: str) -> list:
     return [r.email for r in query.order_by(NotificationRecipient.id).all()]
 
 
-def queue_email(kind: str, subject: str, html: str, text: str, to: list) -> EmailLog:
-    """Record the email and deliver it on a background thread so no request waits on Gmail."""
+def queue_email(kind: str, subject: str, html: str, text: str, to: list, personalize=None) -> EmailLog:
+    """Record the email and deliver it on a background thread so no request waits on Gmail.
+
+    personalize, when given, maps a recipient address to (html, text, extra_headers) so each person
+    can get their own unsubscribe link. It is resolved here, before the thread starts.
+    """
     log = EmailLog(kind=kind, subject=subject[:200], recipients=','.join(to), status='queued')
     if not smtp_status()['configured']:
         log.status = 'skipped'
@@ -77,16 +81,19 @@ def queue_email(kind: str, subject: str, html: str, text: str, to: list) -> Emai
     db.session.commit()
 
     if log.status == 'queued':
+        messages = [
+            (address, *(personalize(address) if personalize else (html, text, {})))
+            for address in to
+        ]
         app = current_app._get_current_object()
-        threading.Thread(
-            target=_deliver, args=(app, log.id, subject, html, text, list(to)), daemon=True
-        ).start()
+        threading.Thread(target=_deliver, args=(app, log.id, subject, messages), daemon=True).start()
     return log
 
 
-def _deliver(app, log_id, subject, html, text, to):
+def _deliver(app, log_id, subject, messages):
     cfg = _smtp_config()
     error = None
+    refused = []
     try:
         context = ssl.create_default_context()
         if cfg['port'] == 465:
@@ -97,15 +104,20 @@ def _deliver(app, log_id, subject, html, text, to):
         with server:
             server.login(cfg['user'], cfg['password'])
             # One message per recipient so nobody sees the rest of the list.
-            for address in to:
+            for address, html, text, headers in messages:
                 msg = EmailMessage()
                 msg['Subject'] = subject
                 msg['From'] = formataddr((cfg['from_name'], cfg['user']))
                 msg['To'] = address
                 msg['Message-ID'] = make_msgid(domain=cfg['user'].split('@', 1)[1])
+                for name, value in headers.items():
+                    msg[name] = value
                 msg.set_content(text)
                 msg.add_alternative(html, subtype='html')
-                server.send_message(msg)
+                try:
+                    server.send_message(msg)
+                except smtplib.SMTPRecipientsRefused:
+                    refused.append(address)  # one bad address must not stop the rest of a bulk send
     except smtplib.SMTPAuthenticationError:
         error = ('Gmail rejected the login. Check SMTP_USER, and that SMTP_APP_PASSWORD is a 16-character '
                  'App Password (the account needs 2-Step Verification turned on).')
@@ -115,12 +127,17 @@ def _deliver(app, log_id, subject, html, text, to):
     except smtplib.SMTPException as exc:
         error = _scrub(f'{type(exc).__name__}: {exc}', cfg['password'])
 
+    delivered = not error and len(refused) < len(messages)
+    if not error and refused:
+        error = (f'{len(refused)} of {len(messages)} address(es) were refused: '
+                 + ', '.join(refused[:5]) + ('…' if len(refused) > 5 else ''))
+
     with app.app_context():
         log = db.session.get(EmailLog, log_id)
         if log:
-            log.status = 'failed' if error else 'sent'
+            log.status = 'sent' if delivered else 'failed'
             log.error = error
-            log.sent_at = None if error else datetime.utcnow()
+            log.sent_at = datetime.utcnow() if delivered else None
             db.session.commit()
 
 

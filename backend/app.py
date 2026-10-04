@@ -15,10 +15,12 @@ from models import (
     SIZE_LEVELS, normalize_offered_sizes, offered_sizes_for, order_size_for,
 )
 from notifications import bp as notifications_bp, safe_check_low_stock, start_scheduler
+from subscribers import bp as subscribers_bp, announce_menu_item, announcement_summary
 
 app = Flask(__name__)
 app.config.from_object(Config)
 app.register_blueprint(notifications_bp)
+app.register_blueprint(subscribers_bp)
 
 # Enable CORS for frontend requests
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -212,7 +214,16 @@ def manage_menu():
             )
             db.session.add(menu_ing)
         db.session.commit()
-        return jsonify(clean_decimal(item.to_dict())), 201
+
+        result = item.to_dict()
+        announce = data.get('announce') or {}
+        if announce.get('enabled'):
+            # The item is saved either way; the admin is told how the announcement went.
+            try:
+                result['announcement'] = announcement_summary(announce_menu_item(item, announce.get('note')))
+            except ValueError as exc:
+                result['announcement'] = {'status': 'skipped', 'error': str(exc), 'recipient_count': 0}
+        return jsonify(clean_decimal(result)), 201
 
     # GET menu
     items = MenuItem.query.order_by(MenuItem.category, MenuItem.name).all()
@@ -719,25 +730,7 @@ def update_review(id):
 
 # ----------------- NEWSLETTER ENDPOINTS -----------------
 
-@app.route('/api/subscribers', methods=['GET', 'POST'])
-def manage_subscribers():
-    if request.method == 'POST':
-        email = ((request.json or {}).get('email') or '').strip().lower()
-        if not email or '@' not in email or '.' not in email.split('@')[-1]:
-            return jsonify({'error': 'A valid email address is required'}), 400
-
-        existing = Subscriber.query.filter_by(email=email).first()
-        if existing:
-            # Subscribing twice is not an error worth showing a guest.
-            return jsonify(clean_decimal(existing.to_dict())), 200
-
-        subscriber = Subscriber(email=email)
-        db.session.add(subscriber)
-        db.session.commit()
-        return jsonify(clean_decimal(subscriber.to_dict())), 201
-
-    subscribers = Subscriber.query.order_by(Subscriber.created_at.desc()).all()
-    return jsonify(clean_decimal([s.to_dict() for s in subscribers]))
+# Subscriber endpoints live in subscribers.py.
 
 # ----------------- ANALYTICS & REPORTS ENDPOINTS -----------------
 

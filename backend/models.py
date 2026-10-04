@@ -1,4 +1,5 @@
 import json
+import secrets
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -178,6 +179,35 @@ def ensure_notification_schema():
             with db.engine.begin() as conn:
                 conn.execute(text('ALTER TABLE ingredients ADD COLUMN low_stock_alerted_at TIMESTAMP'))
             print('Added ingredients.low_stock_alerted_at column')
+    ensure_subscriber_columns()
+
+
+def new_unsubscribe_token():
+    return secrets.token_urlsafe(24)
+
+
+def ensure_subscriber_columns():
+    """Add opt-out tracking to the subscribers table on existing databases and give every row a token."""
+    insp = inspect(db.engine)
+    if not insp.has_table('subscribers'):
+        return
+    columns = {col['name'] for col in insp.get_columns('subscribers')}
+    added = {
+        'name': 'VARCHAR(100)',
+        'source': 'VARCHAR(20)',
+        'is_active': 'BOOLEAN NOT NULL DEFAULT TRUE',
+        'unsubscribe_token': 'VARCHAR(64)',
+        'unsubscribed_at': 'TIMESTAMP',
+    }
+    with db.engine.begin() as conn:
+        for column, ddl in added.items():
+            if column not in columns:
+                conn.execute(text(f'ALTER TABLE subscribers ADD COLUMN {column} {ddl}'))
+                print(f'Added subscribers.{column} column')
+        ids = [row[0] for row in conn.execute(text('SELECT id FROM subscribers WHERE unsubscribe_token IS NULL'))]
+        for sub_id in ids:
+            conn.execute(text('UPDATE subscribers SET unsubscribe_token = :t WHERE id = :id'),
+                         {'t': new_unsubscribe_token(), 'id': sub_id})
 
 
 def ensure_order_guest_columns():
@@ -504,15 +534,26 @@ class Review(db.Model):
         }
 
 class Subscriber(db.Model):
+    """A guest who asked to hear about new menu items."""
     __tablename__ = 'subscribers'
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
+    name = db.Column(db.String(100), nullable=True)
+    source = db.Column(db.String(20), nullable=True)  # footer, post_order
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    # Secret per-subscriber token for the one-click unsubscribe link. Never returned by the API.
+    unsubscribe_token = db.Column(db.String(64), unique=True, nullable=True, default=new_unsubscribe_token)
+    unsubscribed_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         return {
             'id': self.id,
             'email': self.email,
+            'name': self.name,
+            'source': self.source,
+            'is_active': self.is_active,
+            'unsubscribed_at': self.unsubscribed_at.isoformat() if self.unsubscribed_at else None,
             'created_at': self.created_at.isoformat()
         }
 
