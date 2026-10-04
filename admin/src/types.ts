@@ -7,6 +7,7 @@ export interface Ingredient {
   reorder_point: number;
   cost_per_unit: number;
   lifespan_days: number | null;
+  is_low_stock?: boolean;
   created_at: string;
 }
 
@@ -23,6 +24,9 @@ export interface MenuItem {
   created_at: string;
   offered_sizes?: ('Small' | 'Regular' | 'Large')[];
   supports_sizes?: boolean;
+  /** Automatic: an ingredient is at/below its reorder point. Separate from the manual is_available switch. */
+  stock_paused?: boolean;
+  paused_ingredients?: string[];
   ingredients?: {
     ingredient_id: number;
     name: string;
@@ -169,4 +173,57 @@ export interface Order {
   total_amount: number;
   created_at: string;
   items: OrderItem[];
+}
+
+export interface NotificationRecipient {
+  id: number;
+  email: string;
+  name: string | null;
+  receives_low_stock: boolean;
+  receives_daily_report: boolean;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface EmailLogEntry {
+  id: number;
+  kind: 'low_stock' | 'daily_report' | 'test';
+  subject: string;
+  recipients: string[];
+  status: 'queued' | 'sent' | 'failed' | 'skipped';
+  error: string | null;
+  created_at: string;
+  sent_at: string | null;
+}
+
+export interface NotificationSettings {
+  smtp: { configured: boolean; sender: string | null; host: string };
+  low_stock_alerts_enabled: boolean;
+  auto_pause_products: boolean;
+  daily_report_enabled: boolean;
+  closing_time: string;
+  timezone: string;
+  next_report_at: string;
+  current_business_date: string;
+  last_daily_report: EmailLogEntry | null;
+  low_stock_count: number;
+  paused_products: string[];
+}
+
+export interface DailyReportPreview {
+  subject: string;
+  html: string;
+  summary: {
+    business_date: string;
+    window_start: string;
+    window_end: string;
+    revenue: number;
+    cogs: number;
+    profit: number;
+    margin: number;
+    orders: number;
+    items_sold: number;
+    insights: { tone: 'good' | 'warn' | 'bad' | 'info'; text: string }[];
+    conclusion: string;
+  };
 }

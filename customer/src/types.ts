@@ -24,6 +24,9 @@ export interface MenuItem {
   created_at: string;
   offered_sizes?: ProductSize[];
   supports_sizes?: boolean;
+  /** Set by the backend while a recipe ingredient is at/below its reorder point; lifts on restock. */
+  stock_paused?: boolean;
+  paused_ingredients?: string[];
   ingredients: RecipeIngredient[];
 }
 

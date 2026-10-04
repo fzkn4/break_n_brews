@@ -402,6 +402,13 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
                   </span>
                 </div>
 
+                {item.stock_paused && (
+                  <div style={styles.pausedNote}>
+                    Paused for low stock ({(item.paused_ingredients || []).join(', ')}). Customers see "Unavailable
+                    at the moment" until restocked.
+                  </div>
+                )}
+
                 {item.offered_sizes && item.offered_sizes.length > 0 && (
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                     Sizes: {item.offered_sizes.join(', ')}
@@ -901,6 +908,15 @@ const styles = {
     justifyContent: 'center',
     width: '100%',
     height: '100%'
+  },
+  pausedNote: {
+    fontSize: '0.75rem',
+    lineHeight: 1.4,
+    color: '#f59e0b',
+    background: 'rgba(245, 158, 11, 0.1)',
+    border: '1px solid rgba(245, 158, 11, 0.3)',
+    borderRadius: '8px',
+    padding: '6px 10px'
   },
   categoryBadge: {
     position: 'absolute' as const,

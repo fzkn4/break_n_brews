@@ -9,14 +9,16 @@ from datetime import datetime, timedelta
 from config import Config
 from models import (
     db, Staff, Ingredient, MenuItem, MenuItemIngredient, IngredientRequest, StockInLog, Order, OrderItem,
-    Transaction, Review, Subscriber, ensure_ingredient_lifespan_column, ensure_recipe_size_columns,
-    ensure_order_guest_columns,
+    Transaction, Review, Subscriber, StoreSettings, ensure_ingredient_lifespan_column, ensure_recipe_size_columns,
+    ensure_order_guest_columns, ensure_notification_schema,
     default_lifespan_days, is_sizeable_category, is_auto_customizable, recipe_qty_for_size, LEVEL_MULTIPLIERS,
     SIZE_LEVELS, normalize_offered_sizes, offered_sizes_for, order_size_for,
 )
+from notifications import bp as notifications_bp, safe_check_low_stock, start_scheduler
 
 app = Flask(__name__)
 app.config.from_object(Config)
+app.register_blueprint(notifications_bp)
 
 # Enable CORS for frontend requests
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -41,7 +43,10 @@ def _ensure_schema():
     ensure_ingredient_lifespan_column()
     ensure_recipe_size_columns()
     ensure_order_guest_columns()
+    ensure_notification_schema()
     _schema_ready = True
+    # Started from the first request (not at import) so init_db.py never runs a stray scheduler.
+    start_scheduler(app)
 
 # Helper function to convert Decimals to floats recursively for JSON response
 def clean_decimal(obj):
@@ -77,6 +82,7 @@ def manage_ingredients():
         )
         db.session.add(ing)
         db.session.commit()
+        safe_check_low_stock()
         return jsonify(clean_decimal(ing.to_dict())), 201
 
     # GET ingredients
@@ -112,6 +118,7 @@ def update_ingredient(id):
         ing.lifespan_days = int(data['lifespan_days']) if data['lifespan_days'] not in (None, '') else None
         
     db.session.commit()
+    safe_check_low_stock()
     return jsonify(clean_decimal(ing.to_dict()))
 
 # ----------------- MENU ENDPOINTS -----------------
@@ -209,7 +216,8 @@ def manage_menu():
 
     # GET menu
     items = MenuItem.query.order_by(MenuItem.category, MenuItem.name).all()
-    return jsonify(clean_decimal([i.to_dict() for i in items]))
+    auto_pause = StoreSettings.current().auto_pause_products
+    return jsonify(clean_decimal([i.to_dict(auto_pause=auto_pause) for i in items]))
 
 @app.route('/api/menu/<int:id>', methods=['PUT', 'DELETE'])
 def update_menu_item(id):
@@ -360,6 +368,7 @@ def update_request(id):
         req.notes = data['notes']
 
     db.session.commit()
+    safe_check_low_stock()
     return jsonify(clean_decimal(req.to_dict()))
 
 # ----------------- RECORD STOCK IN -----------------
@@ -399,6 +408,7 @@ def manage_stockin():
         )
         db.session.add(stock_log)
         db.session.commit()
+        safe_check_low_stock()
         return jsonify(clean_decimal(stock_log.to_dict())), 201
 
     # GET stock-in logs
@@ -474,6 +484,7 @@ def place_order():
     order_items = []
     
     # First: Validate stock levels for all items dynamically
+    auto_pause = StoreSettings.current().auto_pause_products
     required_ingredients = {}
     for item in items_data:
         menu_item_id = item.get('menu_item_id')
@@ -481,6 +492,8 @@ def place_order():
         menu_item = MenuItem.query.get(menu_item_id)
         if not menu_item:
             return jsonify({'error': f'Item ID {menu_item_id} not found'}), 404
+        if auto_pause and menu_item.low_stock_ingredients():
+            return jsonify({'error': f'{menu_item.name} is unavailable at the moment. Please choose something else.'}), 400
         
         customs = item.get('customizations', [])
         customs_dict = {c['ingredient_id']: c.get('level', 'Regular') for c in customs if 'ingredient_id' in c}
@@ -572,6 +585,7 @@ def place_order():
     )
     db.session.add(txn)
     db.session.commit()
+    safe_check_low_stock()
 
     return jsonify(clean_decimal(new_order.to_dict())), 201
 
@@ -947,6 +961,7 @@ if __name__ == '__main__':
             ensure_ingredient_lifespan_column()
             ensure_recipe_size_columns()
             ensure_order_guest_columns()
+            ensure_notification_schema()
             print('Existing database detected — preserving schema and data.')
 
     port = int(os.getenv('PORT', 5000))
