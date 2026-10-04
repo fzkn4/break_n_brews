@@ -7,13 +7,11 @@ import {
   Clock,
   Eye,
   FileText,
-  KeyRound,
   Loader2,
   Mail,
   PackageX,
   Plus,
   Send,
-  ShieldCheck,
   Trash2,
   Users,
   X,
@@ -322,47 +320,6 @@ export const EmailNotifications: React.FC<EmailNotificationsProps> = ({ showToas
       <p style={styles.subtitle}>
         Get an email the moment an ingredient runs low, and a sales, profit and insights report every night at closing.
       </p>
-
-      {/* ---------- Connection status ---------- */}
-      <div
-        className="glass-card"
-        style={{ ...styles.banner, borderColor: smtpReady ? 'rgba(16,185,129,0.35)' : 'rgba(245,158,11,0.45)' }}
-      >
-        <div style={{ ...styles.bannerIcon, background: smtpReady ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)' }}>
-          {smtpReady ? <ShieldCheck size={22} color="#10b981" /> : <KeyRound size={22} color="#f59e0b" />}
-        </div>
-        <div style={{ flex: 1, minWidth: 220 }}>
-          <h3 style={styles.bannerTitle}>{smtpReady ? 'Gmail sender connected' : 'Connect a Gmail sender to start emailing'}</h3>
-          {smtpReady ? (
-            <p style={styles.bannerText}>
-              Sending as <b>{settings.smtp.sender}</b> through {settings.smtp.host}. The address and App Password live
-              only in the server's environment and are never shown or stored here.
-            </p>
-          ) : (
-            <div style={styles.bannerText}>
-              For security, credentials are not entered in the portal. Ask whoever runs the server to:
-              <ol style={styles.steps}>
-                <li>Turn on 2-Step Verification for the Gmail account, then create an <b>App Password</b>.</li>
-                <li>
-                  Put both in <code style={styles.code}>backend/.env</code>:{' '}
-                  <code style={styles.code}>SMTP_USER=yourstore@gmail.com</code>{' '}
-                  <code style={styles.code}>SMTP_APP_PASSWORD=xxxx xxxx xxxx xxxx</code>
-                </li>
-                <li>Restart the backend. This card turns green when it is connected.</li>
-              </ol>
-            </div>
-          )}
-        </div>
-        <button
-          className="btn btn-secondary"
-          disabled={!smtpReady || activeRecipients.length === 0 || busy === 'test'}
-          title={!smtpReady ? 'Connect a sender first' : activeRecipients.length === 0 ? 'Add a recipient first' : ''}
-          onClick={() => runAction('test', `${NOTIFY_URL}/test`, {}, `Test email sent to ${activeRecipients.length} recipient(s)`)}
-        >
-          {busy === 'test' ? <Loader2 size={16} className="notif-spin" /> : <Send size={16} />}
-          Send test email
-        </button>
-      </div>
 
       {smtpReady && activeRecipients.length === 0 && (
         <div style={styles.hint}>
@@ -709,12 +666,6 @@ export const EmailNotifications: React.FC<EmailNotificationsProps> = ({ showToas
 const styles: Record<string, React.CSSProperties> = {
   container: { padding: '24px', display: 'flex', flexDirection: 'column', gap: 16 },
   subtitle: { margin: 0, color: 'var(--text-muted)', fontSize: '0.95rem' },
-  banner: { display: 'flex', alignItems: 'flex-start', gap: 16, padding: 20, flexWrap: 'wrap', border: '1px solid' },
-  bannerIcon: { width: 44, height: 44, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  bannerTitle: { margin: '0 0 4px', fontSize: '1.05rem', color: 'var(--text-primary)' },
-  bannerText: { margin: 0, fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.6 },
-  steps: { margin: '8px 0 0', paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 4 },
-  code: { background: 'var(--input-bg)', border: '1px solid var(--border-glass)', borderRadius: 6, padding: '1px 6px', fontSize: '0.8rem', overflowWrap: 'anywhere' },
   hint: { display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.88rem', color: 'var(--text-secondary)', padding: '10px 14px', borderRadius: 10, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 20 },
   card: { padding: 20, display: 'flex', flexDirection: 'column', gap: 14 },
