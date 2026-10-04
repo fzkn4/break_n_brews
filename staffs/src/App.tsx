@@ -3,8 +3,13 @@ import './index.css';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { OrderQueue } from './components/OrderQueue';
+import { WalkInMenu } from './components/WalkInMenu';
+import { IngredientSupplyRequests } from './components/IngredientSupplyRequests';
+import { InventoryAlerts } from './components/InventoryAlerts';
 import { Login } from './components/Login';
-import type { Ingredient, Order } from './types';
+import type { Ingredient, Order, IngredientRequest } from './types';
+import { hydrateAndMergeMenuItems } from './lib/menuStorage';
+import { STORAGE_KEYS, readStore, writeStore } from './lib/storage';
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
@@ -15,10 +20,19 @@ function App() {
   });
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [menuItems, setMenuItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [ingredients, setIngredients] = useState<Ingredient[]>(() =>
+    readStore<Ingredient[]>(STORAGE_KEYS.ingredients, [])
+  );
+  const [orders, setOrders] = useState<Order[]>(() =>
+    readStore<Order[]>(STORAGE_KEYS.orders, [])
+  );
+  const [menuItems, setMenuItems] = useState<any[]>(() =>
+    hydrateAndMergeMenuItems(readStore<any[]>(STORAGE_KEYS.menuItems, []))
+  );
+  const [requests, setRequests] = useState<IngredientRequest[]>(() =>
+    readStore<IngredientRequest[]>(STORAGE_KEYS.requests, [])
+  );
+  const [loading, setLoading] = useState<boolean>(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -41,19 +55,41 @@ function App() {
   // Sync data from backend
   const syncStaffPortalData = useCallback(async (showSilentError = false) => {
     try {
-      const [ingRes, ordersRes, menuRes] = await Promise.all([
+      const [ingRes, ordersRes, menuRes, reqsRes] = await Promise.all([
         fetch(`${API_URL}/ingredients`),
         fetch(`${API_URL}/orders`),
-        fetch(`${API_URL}/menu`)
+        fetch(`${API_URL}/menu`),
+        fetch(`${API_URL}/requests`)
       ]);
 
-      if (ingRes.ok) setIngredients(await ingRes.json());
-      if (ordersRes.ok) setOrders(await ordersRes.json());
-      if (menuRes.ok) setMenuItems(await menuRes.json());
+      if (ingRes.ok) {
+        const data = await ingRes.json();
+        setIngredients(data);
+        writeStore(STORAGE_KEYS.ingredients, data);
+      }
+      if (ordersRes.ok) {
+        const data = await ordersRes.json();
+        setOrders(data);
+        writeStore(STORAGE_KEYS.orders, data);
+      }
+      if (menuRes.ok) {
+        const data = await menuRes.json();
+        const merged = hydrateAndMergeMenuItems(data);
+        setMenuItems(merged);
+        writeStore(STORAGE_KEYS.menuItems, data);
+      } else {
+        setMenuItems(hydrateAndMergeMenuItems([]));
+      }
+      if (reqsRes.ok) {
+        const data = await reqsRes.json();
+        setRequests(data);
+        writeStore(STORAGE_KEYS.requests, data);
+      }
       
       setLoading(false);
     } catch (err) {
       console.error('Failed to sync staff portal data:', err);
+      setMenuItems(hydrateAndMergeMenuItems([]));
       if (!showSilentError) {
         showToast('Error syncing with database', 'error');
       }
@@ -95,13 +131,24 @@ function App() {
   };
 
   // Record a POS Sale
-  const handleRecordSale = async (menuItemId: number, quantity: number, serveImmediately: boolean) => {
+  const handleRecordSale = async (
+    menuItemId: number,
+    quantity: number,
+    serveImmediately: boolean,
+    size: string | null,
+    customizations: { ingredient_id: number; name: string; level: string }[]
+  ) => {
     try {
       const res = await fetch(`${API_URL}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          items: [{ menu_item_id: menuItemId, quantity }],
+          items: [{
+            menu_item_id: menuItemId,
+            quantity,
+            size,
+            customizations
+          }],
           status: serveImmediately ? 'completed' : 'pending',
           payment_method: 'cash'
         })
@@ -135,6 +182,7 @@ function App() {
 
       if (res.ok) {
         showToast('Supply request sent to manager');
+        syncStaffPortalData(true);
       } else {
         const err = await res.json();
         showToast(err.error || 'Failed to send request', 'error');
@@ -144,7 +192,30 @@ function App() {
     }
   };
 
+  // Update request status (Approve or Reject)
+  const handleUpdateRequestStatus = async (id: number, status: 'approved' | 'rejected') => {
+    try {
+      const res = await fetch(`${API_URL}/requests/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+
+      if (res.ok) {
+        showToast(`Request #${id} marked as ${status}`);
+        syncStaffPortalData(true);
+      } else {
+        const err = await res.json();
+        showToast(err.error || `Failed to update request #${id}`, 'error');
+      }
+    } catch (err) {
+      showToast('Network error updating request status', 'error');
+    }
+  };
+
   const pendingOrdersCount = orders.filter(o => o.status === 'pending' || o.status === 'preparing').length;
+  const pendingRequestsCount = requests.filter(r => r.status === 'pending').length;
+  const lowStockCount = ingredients.filter(i => i.stock_level <= i.reorder_point).length;
 
   if (!currentUser) {
     return (
@@ -167,6 +238,8 @@ function App() {
         setActiveTab={setActiveTab}
         onLogout={handleLogout}
         pendingOrdersCount={pendingOrdersCount}
+        pendingRequestsCount={pendingRequestsCount}
+        lowStockCount={lowStockCount}
       />
 
       {/* Main Content Area */}
@@ -175,11 +248,13 @@ function App() {
           <Dashboard
             ingredients={ingredients}
             orders={orders}
+            requests={requests}
             loading={loading}
             onRefresh={() => {
               setLoading(true);
               syncStaffPortalData();
             }}
+            onNavigateTab={(tab: string) => setActiveTab(tab)}
           />
         )}
 
@@ -192,6 +267,46 @@ function App() {
             onRecordSale={handleRecordSale}
             onRequestIngredient={handleRequestIngredient}
             loading={loading}
+            onRefresh={() => {
+              setLoading(true);
+              syncStaffPortalData();
+            }}
+          />
+        )}
+
+        {activeTab === 'menu' && (
+          <WalkInMenu
+            menuItems={menuItems}
+            ingredients={ingredients}
+            onRecordSale={handleRecordSale}
+            onRequestIngredient={handleRequestIngredient}
+            loading={loading}
+            onRefresh={() => {
+              setLoading(true);
+              syncStaffPortalData();
+            }}
+          />
+        )}
+
+        {activeTab === 'requests' && (
+          <IngredientSupplyRequests
+            requests={requests}
+            ingredients={ingredients}
+            loading={loading}
+            onUpdateRequestStatus={handleUpdateRequestStatus}
+            onRequestIngredient={handleRequestIngredient}
+            onRefresh={() => {
+              setLoading(true);
+              syncStaffPortalData();
+            }}
+          />
+        )}
+
+        {activeTab === 'alerts' && (
+          <InventoryAlerts
+            ingredients={ingredients}
+            loading={loading}
+            onRequestIngredient={handleRequestIngredient}
             onRefresh={() => {
               setLoading(true);
               syncStaffPortalData();

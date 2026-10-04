@@ -1,16 +1,18 @@
-import React, { useState } from 'react';
-import { Archive, Plus, List, Calendar, Truck, DollarSign } from 'lucide-react';
-import type { StockInLog, Ingredient } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Archive, Plus, List, Calendar, Truck, CheckCircle2, UserCheck, Clock, FileText, ArrowRight } from 'lucide-react';
+import type { StockInLog, Ingredient, IngredientRequest } from '../types';
 
 interface RecordStockInProps {
   stockInLogs: StockInLog[];
   ingredients: Ingredient[];
+  requests?: IngredientRequest[];
   onRecordStockIn: (data: any) => void;
 }
 
 export const RecordStockIn: React.FC<RecordStockInProps> = ({
   stockInLogs,
   ingredients,
+  requests = [],
   onRecordStockIn
 }) => {
   // Form states
@@ -22,6 +24,40 @@ export const RecordStockIn: React.FC<RecordStockInProps> = ({
   const [supplier, setSupplier] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
 
+  // Local persistence for processed request IDs to keep state across refreshes & restarts
+  const [processedIds, setProcessedIds] = useState<number[]>(() => {
+    try {
+      const saved = localStorage.getItem('bb_processed_request_ids');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('bb_processed_request_ids', JSON.stringify(processedIds));
+    } catch (e) {
+      console.warn('Failed to save processed request IDs to localStorage:', e);
+    }
+  }, [processedIds]);
+
+  // Fallback persistence for stock-in logs
+  useEffect(() => {
+    if (stockInLogs.length > 0) {
+      try {
+        localStorage.setItem('bb_stockin_logs', JSON.stringify(stockInLogs));
+      } catch (e) {
+        console.warn('Failed to persist stock-in logs:', e);
+      }
+    }
+  }, [stockInLogs]);
+
+  // Filter approved requests from staff portal queue
+  const approvedRequests = requests.filter(
+    (req) => req.status === 'approved' && !processedIds.includes(req.id)
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!ingredientId) return;
@@ -30,8 +66,8 @@ export const RecordStockIn: React.FC<RecordStockInProps> = ({
       ingredient_id: parseInt(ingredientId),
       quantity: parseFloat(quantity) || 0,
       cost: parseFloat(cost) || 0,
-      supplier,
-      invoice_number: invoiceNumber || null
+      supplier: supplier.trim() || 'Direct Restock',
+      invoice_number: invoiceNumber.trim() || null
     });
 
     // Reset form
@@ -41,16 +77,44 @@ export const RecordStockIn: React.FC<RecordStockInProps> = ({
     setInvoiceNumber('');
   };
 
-  // Get selected ingredient unit
-  const selectedIng = ingredients.find(i => i.id === parseInt(ingredientId));
+  const handleProcessApproved = (req: IngredientRequest) => {
+    const ing = ingredients.find((i) => i.id === req.ingredient_id);
+    const calculatedCost = ing && ing.cost_per_unit ? ing.cost_per_unit * req.quantity : 0;
+
+    onRecordStockIn({
+      ingredient_id: req.ingredient_id,
+      quantity: req.quantity,
+      cost: calculatedCost > 0 ? calculatedCost : 0,
+      supplier: `Staff Req: ${req.staff_name}`,
+      invoice_number: `REQ-${req.id}`
+    });
+
+    setProcessedIds((prev) => [...prev, req.id]);
+  };
+
+  const handleFillFormFromRequest = (req: IngredientRequest) => {
+    setIngredientId(req.ingredient_id.toString());
+    setQuantity(req.quantity.toString());
+    const ing = ingredients.find((i) => i.id === req.ingredient_id);
+    if (ing && ing.cost_per_unit) {
+      setCost((ing.cost_per_unit * req.quantity).toFixed(2));
+    } else {
+      setCost('');
+    }
+    setSupplier(`Staff Req: ${req.staff_name}`);
+    setInvoiceNumber(`REQ-${req.id}`);
+  };
+
+  // Selected ingredient details
+  const selectedIng = ingredients.find((i) => i.id === parseInt(ingredientId));
   const currentUnit = selectedIng ? selectedIng.unit : 'units';
 
   return (
-    <div style={styles.container} className="fade-in">
+    <div style={styles.container} className="page-scroll fade-in">
       <div style={styles.layoutGrid}>
         
-        {/* LEFT COLUMN: Record Shipment Form */}
-        <div style={styles.formCard} className="glass-card">
+        {/* COLUMN 1: Record Incoming Stock Form */}
+        <div style={styles.card} className="glass-card">
           <div style={styles.cardHeader}>
             <div style={styles.headerTitleGroup}>
               <Archive size={20} color="#f59e0b" />
@@ -70,7 +134,7 @@ export const RecordStockIn: React.FC<RecordStockInProps> = ({
                 required
               >
                 <option value="" disabled>-- Select an Ingredient --</option>
-                {ingredients.map(ing => (
+                {ingredients.map((ing) => (
                   <option key={ing.id} value={ing.id} style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
                     {ing.name} ({ing.category} | Current: {ing.stock_level} {ing.unit})
                   </option>
@@ -97,13 +161,13 @@ export const RecordStockIn: React.FC<RecordStockInProps> = ({
               </div>
 
               <div style={{ ...styles.inputGroup, flex: 1 }}>
-                <label style={styles.label}>Total Shipment Cost ($)</label>
+                <label style={styles.label}>Total Shipment Cost (₱)</label>
                 <div style={styles.inputWithPrefix}>
-                  <DollarSign size={14} style={styles.prefixIcon} />
+                  <span style={{ ...styles.prefixIcon, fontSize: '14px', fontWeight: 700 }}>₱</span>
                   <input
                     type="number"
                     step="0.01"
-                    placeholder="e.g. 150.00"
+                    placeholder="e.g. 6000.00"
                     className="glass-input"
                     value={cost}
                     onChange={(e) => setCost(e.target.value)}
@@ -146,13 +210,110 @@ export const RecordStockIn: React.FC<RecordStockInProps> = ({
 
             <button type="submit" className="btn btn-primary" style={{ marginTop: '8px', justifyContent: 'center' }}>
               <Plus size={16} />
-              <span>Record & Add Stock</span>
+              <span>Record &amp; Add Stock</span>
             </button>
           </form>
         </div>
 
-        {/* RIGHT COLUMN: Recent Shipment History */}
-        <div style={styles.historyCard} className="glass-card">
+        {/* COLUMN 2: Approved Stock In Requests Sheet (NEW) */}
+        <div style={styles.card} className="glass-card">
+          <div style={styles.cardHeader}>
+            <div style={styles.headerTitleGroup}>
+              <CheckCircle2 size={20} color="#10b981" />
+              <h3 style={styles.cardTitle}>Approved Stock In Requests</h3>
+            </div>
+            <span style={styles.headerDesc}>Staff portal approved supply requests ready to process into inventory.</span>
+          </div>
+
+          <div style={styles.requestListContainer} className="table-scroll">
+            {approvedRequests.length === 0 ? (
+              <div style={styles.emptyState}>
+                <CheckCircle2 size={32} color="#10b981" style={{ opacity: 0.5, marginBottom: '8px' }} />
+                <span>No approved supply requests pending check-in.</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {approvedRequests.map((req) => {
+                  const ing = ingredients.find((i) => i.id === req.ingredient_id);
+                  const ingName = req.ingredient_name || ing?.name || `Ingredient #${req.ingredient_id}`;
+                  const ingUnit = req.ingredient_unit || ing?.unit || 'units';
+
+                  return (
+                    <div key={req.id} style={styles.approvedCardItem}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={styles.approvedBadge}>
+                          ✓ Approved by Staff
+                        </span>
+                        <span style={styles.timestampText}>
+                          <Clock size={11} style={{ marginRight: '4px' }} />
+                          {new Date(req.requested_at).toLocaleDateString()}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+                        <span style={{ fontWeight: '700', fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                          {ingName}
+                        </span>
+                        <span style={{ fontWeight: '800', fontSize: '1rem', color: '#10b981' }}>
+                          +{req.quantity} {ingUnit}
+                        </span>
+                      </div>
+
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <UserCheck size={12} color="var(--text-muted)" />
+                          <span>Requested by: <strong>{req.staff_name}</strong></span>
+                        </div>
+                        {req.notes && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                            <FileText size={12} color="var(--text-muted)" />
+                            <span>Notes: {req.notes}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => handleProcessApproved(req)}
+                          style={{
+                            flex: 1,
+                            justifyContent: 'center',
+                            fontSize: '0.8rem',
+                            padding: '8px 12px',
+                            background: 'linear-gradient(135deg, #10b981, #059669)',
+                            border: 'none'
+                          }}
+                        >
+                          <Plus size={14} />
+                          <span>Process Stock-In</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => handleFillFormFromRequest(req)}
+                          style={{
+                            justifyContent: 'center',
+                            fontSize: '0.8rem',
+                            padding: '8px 12px'
+                          }}
+                          title="Fill form to edit supplier/cost"
+                        >
+                          <ArrowRight size={14} />
+                          <span>Fill Form</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* COLUMN 3: Recent Shipment Logs Table */}
+        <div style={styles.card} className="glass-card">
           <div style={styles.cardHeader}>
             <div style={styles.headerTitleGroup}>
               <List size={20} color="#3b82f6" />
@@ -161,7 +322,7 @@ export const RecordStockIn: React.FC<RecordStockInProps> = ({
             <span style={styles.headerDesc}>Audit logs of registered deliveries and supply restocks.</span>
           </div>
 
-          <div style={styles.tableContainer}>
+          <div style={styles.tableContainer} className="table-scroll">
             {stockInLogs.length === 0 ? (
               <div style={styles.emptyState}>
                 <span>No stock-in entries recorded yet.</span>
@@ -180,9 +341,9 @@ export const RecordStockIn: React.FC<RecordStockInProps> = ({
                 <tbody>
                   {stockInLogs.slice(0, 10).map((log) => (
                     <tr key={log.id}>
-                      <td style={{ color: '#9ca3af' }}>
+                      <td style={{ color: 'var(--text-muted)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Calendar size={12} color="#6b7280" />
+                          <Calendar size={12} color="var(--text-muted)" />
                           <span>{new Date(log.received_at).toLocaleDateString()}</span>
                         </div>
                       </td>
@@ -191,13 +352,13 @@ export const RecordStockIn: React.FC<RecordStockInProps> = ({
                         +{log.quantity} {log.ingredient_unit}
                       </td>
                       <td style={{ fontWeight: '600' }}>
-                        ${log.cost.toFixed(2)}
+                        ₱{log.cost.toFixed(2)}
                       </td>
                       <td>
                         <div style={{ display: 'flex', flexDirection: 'column' as const }}>
                           <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{log.supplier}</span>
                           {log.invoice_number && (
-                            <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                               Ref: {log.invoice_number}
                             </span>
                           )}
@@ -222,28 +383,23 @@ const styles = {
     display: 'flex',
     flexDirection: 'column' as const,
     boxSizing: 'border-box' as const,
-    overflowY: 'auto' as const,
+    minHeight: 0,
     flex: 1
   },
   layoutGrid: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1.2fr',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
     gap: '24px',
     alignItems: 'start',
     width: '100%'
   },
-  formCard: {
-    padding: '24px',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    textAlign: 'left' as const
-  },
-  historyCard: {
+  card: {
     padding: '24px',
     display: 'flex',
     flexDirection: 'column' as const,
     textAlign: 'left' as const,
-    maxHeight: '520px',
+    maxHeight: 'calc(100vh - 160px)',
+    minHeight: '480px',
     overflow: 'hidden'
   },
   cardHeader: {
@@ -267,7 +423,7 @@ const styles = {
   },
   headerDesc: {
     fontSize: '0.75rem',
-    color: '#9ca3af'
+    color: 'var(--text-muted)'
   },
   formBody: {
     display: 'flex',
@@ -285,7 +441,7 @@ const styles = {
   },
   label: {
     fontSize: '0.8rem',
-    color: '#9ca3af',
+    color: 'var(--text-muted)',
     fontWeight: '600'
   },
   inputWithSuffix: {
@@ -297,7 +453,7 @@ const styles = {
     position: 'absolute' as const,
     right: '12px',
     fontSize: '0.8rem',
-    color: '#9ca3af',
+    color: 'var(--text-muted)',
     fontWeight: '600'
   },
   inputWithPrefix: {
@@ -308,19 +464,51 @@ const styles = {
   prefixIcon: {
     position: 'absolute' as const,
     left: '10px',
-    color: '#9ca3af'
+    color: 'var(--text-muted)'
   },
   tableContainer: {
     overflowY: 'auto' as const,
+    minHeight: 0,
     flex: 1
+  },
+  requestListContainer: {
+    overflowY: 'auto' as const,
+    minHeight: 0,
+    flex: 1
+  },
+  approvedCardItem: {
+    background: 'rgba(255, 255, 255, 0.04)',
+    border: '1px solid var(--border-glass)',
+    borderRadius: '12px',
+    padding: '16px',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    transition: 'all 0.2s ease'
+  },
+  approvedBadge: {
+    background: 'rgba(16, 185, 129, 0.15)',
+    color: '#10b981',
+    border: '1px solid rgba(16, 185, 129, 0.3)',
+    padding: '3px 10px',
+    borderRadius: '12px',
+    fontSize: '0.72rem',
+    fontWeight: 700
+  },
+  timestampText: {
+    fontSize: '0.72rem',
+    color: 'var(--text-muted)',
+    display: 'flex',
+    alignItems: 'center'
   },
   emptyState: {
     display: 'flex',
+    flexDirection: 'column' as const,
     alignItems: 'center',
     justifyContent: 'center',
-    height: '200px',
-    color: '#6b7280',
+    height: '220px',
+    color: 'var(--text-muted)',
     fontSize: '0.85rem',
-    fontStyle: 'italic'
+    fontStyle: 'italic',
+    textAlign: 'center' as const
   }
 };

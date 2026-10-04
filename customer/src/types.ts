@@ -5,6 +5,9 @@ export interface RecipeIngredient {
   name: string;
   unit: string;
   default_quantity: number;
+  qty_small?: number | null;
+  qty_medium?: number | null;
+  qty_large?: number | null;
   is_customizable: boolean;
 }
 
@@ -13,9 +16,14 @@ export interface MenuItem {
   name: string;
   category: string;
   price: number;
+  price_small?: number | null;
+  price_medium?: number | null;
+  price_large?: number | null;
   is_available: boolean;
   image_url: string | null;
   created_at: string;
+  offered_sizes?: ProductSize[];
+  supports_sizes?: boolean;
   ingredients: RecipeIngredient[];
 }
 
@@ -27,15 +35,19 @@ export interface Ingredient {
   unit: string;
   reorder_point: number;
   cost_per_unit: number;
+  lifespan_days: number | null;
   created_at: string;
 }
 
 export type OrderStatus = 'pending' | 'preparing' | 'completed' | 'cancelled';
 
+export type CustomizationLevel = 'Less' | 'Regular' | 'Extra';
+export type ProductSize = 'Small' | 'Regular' | 'Large';
+
 export interface OrderItemCustomization {
   ingredient_id: number;
   name: string;
-  level: CustomizationLevel;
+  level: CustomizationLevel | 'None' | string;
 }
 
 export interface OrderItem {
@@ -46,6 +58,7 @@ export interface OrderItem {
   quantity: number;
   price_at_order: number;
   subtotal: number;
+  size?: string | null;
   customizations: OrderItemCustomization[];
 }
 
@@ -76,15 +89,14 @@ export interface Subscriber {
 
 // ----- Client-only shapes -----
 
-export type CustomizationLevel = 'None' | 'Less' | 'Regular' | 'Extra';
-
 export interface CartItem {
-  /** menu item id + the chosen levels, so two customizations of one drink stay separate rows. */
+  /** menu item id + size + the chosen levels, so two customizations of one drink stay separate rows. */
   id: string;
   menuItemId: number;
   name: string;
   price: number;
   quantity: number;
+  size?: ProductSize;
   customizations: OrderItemCustomization[];
 }
 

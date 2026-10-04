@@ -1,11 +1,13 @@
 import React from 'react';
-import { LayoutDashboard, Package, LogOut } from 'lucide-react';
+import { LayoutDashboard, Package, UtensilsCrossed, FileText, AlertTriangle, LogOut } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   onLogout: () => void;
   pendingOrdersCount: number;
+  pendingRequestsCount?: number;
+  lowStockCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -13,10 +15,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   onLogout,
   pendingOrdersCount,
+  pendingRequestsCount = 0,
+  lowStockCount = 0,
 }) => {
   const menuItems = [
     { id: 'dashboard', label: 'DASHBOARD', icon: LayoutDashboard },
     { id: 'orders', label: 'ORDER QUEUE', icon: Package, badge: pendingOrdersCount },
+    { id: 'menu', label: 'MENU', icon: UtensilsCrossed },
+    { id: 'requests', label: 'INGREDIENTS SUPPLY REQUEST', icon: FileText, badge: pendingRequestsCount },
+    { id: 'alerts', label: 'INVENTORY ALERT', icon: AlertTriangle, badge: lowStockCount, badgeColor: '#ef4444' },
   ];
 
   return (
@@ -40,15 +47,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`sidebar-nav-btn ${isActive ? 'active' : ''}`}
+              className={`group flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-200 ease-in-out hover:translate-x-2 hover:bg-amber-500/10 hover:text-amber-500 active:scale-95 sidebar-nav-btn ${isActive ? 'active border-l-4 border-amber-500' : ''}`}
               style={styles.navBtn}
             >
               <div className="btn-content" style={styles.btnContent}>
-                <Icon size={20} color={isActive ? 'var(--accent-primary)' : 'var(--text-muted)'} />
-                <span>{item.label}</span>
+                <Icon size={18} color={isActive ? 'var(--accent-primary)' : 'var(--text-muted)'} style={{ flexShrink: 0 }} />
+                <span style={styles.btnLabel} className="group-hover:text-amber-500 font-medium">{item.label}</span>
               </div>
               {item.badge !== undefined && item.badge > 0 && (
-                <span style={styles.badge}>{item.badge}</span>
+                <span style={{
+                  ...styles.badge,
+                  backgroundColor: item.badgeColor || 'var(--accent-primary)'
+                }}>
+                  {item.badge}
+                </span>
               )}
             </button>
           );
@@ -58,12 +70,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div style={styles.footer}>
         <button
           onClick={onLogout}
-          className="sidebar-nav-btn"
+          className="group flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-200 ease-in-out hover:translate-x-2 hover:bg-amber-500/10 hover:text-amber-500 active:scale-95 sidebar-nav-btn"
           style={{ ...styles.navBtn, ...styles.logoutBtn }}
         >
           <div className="btn-content" style={styles.btnContent}>
-            <LogOut size={20} color="var(--text-muted)" />
-            <span>LOGOUT</span>
+            <LogOut size={18} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+            <span className="group-hover:text-amber-500 font-medium">LOGOUT</span>
           </div>
         </button>
       </div>
@@ -76,27 +88,29 @@ const styles = {
     width: '260px',
     height: '100vh',
     backgroundColor: 'var(--sidebar-bg)',
+    backdropFilter: 'blur(16px)',
+    WebkitBackdropFilter: 'blur(16px)',
     borderRight: '1px solid var(--sidebar-border)',
     display: 'flex',
     flexDirection: 'column' as const,
-    padding: '40px 20px',
+    padding: '30px 16px',
     boxSizing: 'border-box' as const,
   },
   brandSection: {
     display: 'flex',
     flexDirection: 'column' as const,
     alignItems: 'center',
-    marginBottom: '48px',
+    marginBottom: '28px',
   },
   logoContainer: {
-    width: '100px',
-    height: '100px',
-    borderRadius: '24px',
+    width: '80px',
+    height: '80px',
+    borderRadius: '20px',
     backgroundColor: 'rgba(148, 118, 86, 0.05)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: '16px',
+    marginBottom: '12px',
     overflow: 'hidden',
   },
   logoImage: {
@@ -106,7 +120,7 @@ const styles = {
   },
   brandTitle: {
     margin: 0,
-    fontSize: '1.8rem',
+    fontSize: '1.5rem',
     fontWeight: '800',
     color: '#4a3f35',
     letterSpacing: '3px',
@@ -117,32 +131,50 @@ const styles = {
     flexDirection: 'column' as const,
     gap: '8px',
     flex: 1,
+    overflowY: 'auto' as const,
   },
   navBtn: {
-    padding: '14px 20px',
-    borderRadius: '14px',
-    fontSize: '0.9rem',
-    letterSpacing: '1px',
+    padding: '12px 14px',
+    borderRadius: '12px',
+    fontSize: '0.8rem',
+    letterSpacing: '0.5px',
     fontWeight: '700',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    textAlign: 'left' as const,
   },
   btnContent: {
-    gap: '16px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    flex: 1,
+    minWidth: 0,
+  },
+  btnLabel: {
+    whiteSpace: 'normal' as const,
+    lineHeight: '1.2',
+    wordBreak: 'break-word' as const,
   },
   badge: {
-    fontSize: '0.75rem',
+    fontSize: '0.7rem',
     fontWeight: '800',
     color: '#fff',
     backgroundColor: 'var(--accent-primary)',
-    padding: '2px 8px',
+    padding: '2px 7px',
     borderRadius: '10px',
     lineHeight: '1.2',
+    marginLeft: '6px',
+    flexShrink: 0,
   },
   footer: {
     marginTop: 'auto',
-    paddingTop: '20px',
+    paddingTop: '16px',
     borderTop: '1px solid var(--sidebar-border)',
   },
   logoutBtn: {
     width: '100%',
   },
 };
+

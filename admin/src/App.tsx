@@ -9,8 +9,11 @@ import { ManageRequests } from './components/ManageRequests';
 import { RecordStockIn } from './components/RecordStockIn';
 import { Reports } from './components/Reports';
 import { ManageReviews } from './components/ManageReviews';
+import { TableQrCodes } from './components/TableQrCodes';
 import { Login } from './components/Login';
-import type { Ingredient, MenuItem, IngredientRequest, StockInLog, AnalyticsData, ReportData, Review, Subscriber } from './types';
+import type { Ingredient, MenuItem, IngredientRequest, StockInLog, AnalyticsData, ReportData, Review, Subscriber, Order } from './types';
+import { hydrateAndMergeMenuItems, saveCustomMenuItem, removeCustomMenuItem, getCustomMenuItems, getDeletedMenuItemIds } from './lib/menuStorage';
+import { STORAGE_KEYS, readStore, writeStore } from './lib/storage';
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
@@ -54,18 +57,35 @@ function App() {
     showToast(`Welcome back, ${user.name}!`);
   };
   
-  // Data States
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [requests, setRequests] = useState<IngredientRequest[]>([]);
-  const [stockInLogs, setStockInLogs] = useState<StockInLog[]>([]);
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
-  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  // Data States with Persistent Storage Fallbacks
+  const [ingredients, setIngredients] = useState<Ingredient[]>(() =>
+    readStore<Ingredient[]>(STORAGE_KEYS.ingredients, [])
+  );
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(() =>
+    hydrateAndMergeMenuItems(readStore<MenuItem[]>(STORAGE_KEYS.menuItems, []))
+  );
+  const [requests, setRequests] = useState<IngredientRequest[]>(() =>
+    readStore<IngredientRequest[]>(STORAGE_KEYS.requests, [])
+  );
+  const [orders, setOrders] = useState<Order[]>(() =>
+    readStore<Order[]>(STORAGE_KEYS.orders, [])
+  );
+  const [stockInLogs, setStockInLogs] = useState<StockInLog[]>(() =>
+    readStore<StockInLog[]>(STORAGE_KEYS.stockIn, [])
+  );
+  const [reviews, setReviews] = useState<Review[]>(() =>
+    readStore<Review[]>(STORAGE_KEYS.reviews, [])
+  );
+  const [subscribers, setSubscribers] = useState<Subscriber[]>(() =>
+    readStore<Subscriber[]>(STORAGE_KEYS.subscribers, [])
+  );
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(() =>
+    readStore<AnalyticsData | null>(STORAGE_KEYS.analytics, null)
+  );
   const [analyticsDays, setAnalyticsDays] = useState<number>(7);
 
   // Global UX States
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -76,23 +96,83 @@ function App() {
   // Sync all core database lists
   const syncInventoryData = async (silent = false) => {
     try {
-      const [ingRes, menuRes, reqRes, stockRes, reviewRes, subRes, analyticsRes] = await Promise.all([
+      const [ingRes, menuRes, reqRes, orderRes, stockRes, reviewRes, subRes, analyticsRes] = await Promise.all([
         fetch(`${API_URL}/ingredients`),
         fetch(`${API_URL}/menu`),
         fetch(`${API_URL}/requests`),
+        fetch(`${API_URL}/orders`),
         fetch(`${API_URL}/stockin`),
         fetch(`${API_URL}/reviews?all=1`),
         fetch(`${API_URL}/subscribers`),
         fetch(`${API_URL}/analytics?days=${analyticsDays}`)
       ]);
 
-      if (ingRes.ok) setIngredients(await ingRes.json());
-      if (menuRes.ok) setMenuItems(await menuRes.json());
-      if (reqRes.ok) setRequests(await reqRes.json());
-      if (stockRes.ok) setStockInLogs(await stockRes.json());
-      if (reviewRes.ok) setReviews(await reviewRes.json());
-      if (subRes.ok) setSubscribers(await subRes.json());
-      if (analyticsRes.ok) setAnalyticsData(await analyticsRes.json());
+      if (ingRes.ok) {
+        const data = await ingRes.json();
+        setIngredients(data);
+        writeStore(STORAGE_KEYS.ingredients, data);
+      }
+      if (menuRes.ok) {
+        const fetchedMenu: MenuItem[] = await menuRes.json();
+        const merged = hydrateAndMergeMenuItems(fetchedMenu);
+        setMenuItems(merged);
+        writeStore(STORAGE_KEYS.menuItems, fetchedMenu);
+
+        // Sync local menu items (like "tolits cafe") to backend DB if missing from server
+        const customItems = getCustomMenuItems();
+        const deletedIds = getDeletedMenuItemIds();
+        const fetchedNames = new Set(fetchedMenu.map((i) => i.name.toLowerCase().trim()));
+
+        for (const item of customItems) {
+          if (!deletedIds.includes(item.id) && !fetchedNames.has(item.name.toLowerCase().trim())) {
+            try {
+              const res = await fetch(`${API_URL}/menu`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(item)
+              });
+              if (res.ok) {
+                const saved = await res.json();
+                saveCustomMenuItem(saved);
+              }
+            } catch (err) {
+              console.warn('Failed to sync local menu item to backend:', item.name, err);
+            }
+          }
+        }
+      } else {
+        setMenuItems(hydrateAndMergeMenuItems([]));
+      }
+      if (reqRes.ok) {
+        const data = await reqRes.json();
+        setRequests(data);
+        writeStore(STORAGE_KEYS.requests, data);
+      }
+      if (orderRes.ok) {
+        const data = await orderRes.json();
+        setOrders(data);
+        writeStore(STORAGE_KEYS.orders, data);
+      }
+      if (stockRes.ok) {
+        const data = await stockRes.json();
+        setStockInLogs(data);
+        writeStore(STORAGE_KEYS.stockIn, data);
+      }
+      if (reviewRes.ok) {
+        const data = await reviewRes.json();
+        setReviews(data);
+        writeStore(STORAGE_KEYS.reviews, data);
+      }
+      if (subRes.ok) {
+        const data = await subRes.json();
+        setSubscribers(data);
+        writeStore(STORAGE_KEYS.subscribers, data);
+      }
+      if (analyticsRes.ok) {
+        const data = await analyticsRes.json();
+        setAnalyticsData(data);
+        writeStore(STORAGE_KEYS.analytics, data);
+      }
       
       setLoading(false);
     } catch (err) {
@@ -191,14 +271,33 @@ function App() {
         body: JSON.stringify(data)
       });
       if (res.ok) {
+        const createdItem: MenuItem = await res.json();
+        saveCustomMenuItem(createdItem);
         showToast('Menu item added successfully');
-        syncInventoryData();
+        await syncInventoryData(true);
       } else {
         const err = await res.json();
         showToast(err.error || 'Failed to add menu item', 'error');
       }
     } catch (err) {
-      showToast('Network error adding menu item', 'error');
+      // Offline fallback
+      const createdItem: MenuItem = {
+        id: Date.now(),
+        name: data.name,
+        category: data.category,
+        price: Number(data.price || 0),
+        price_small: data.price_small != null ? Number(data.price_small) : null,
+        price_medium: data.price_medium != null ? Number(data.price_medium) : null,
+        price_large: data.price_large != null ? Number(data.price_large) : null,
+        is_available: data.is_available ?? true,
+        image_url: data.image_url || null,
+        offered_sizes: data.offered_sizes || [],
+        ingredients: data.ingredients || [],
+        created_at: new Date().toISOString()
+      };
+      saveCustomMenuItem(createdItem);
+      showToast('Added menu item locally', 'success');
+      await syncInventoryData(true);
     }
   };
 
@@ -210,13 +309,24 @@ function App() {
         body: JSON.stringify(data)
       });
       if (res.ok) {
+        const updatedItem: MenuItem = await res.json();
+        saveCustomMenuItem(updatedItem);
         showToast('Menu item updated successfully');
-        syncInventoryData();
+        await syncInventoryData(true);
       } else {
-        showToast('Failed to update menu item', 'error');
+        const err = await res.json();
+        showToast(err.error || 'Failed to update menu item', 'error');
       }
     } catch (err) {
-      showToast('Network error updating menu item', 'error');
+      const existing = menuItems.find((m) => m.id === id);
+      const updatedItem: MenuItem = {
+        ...(existing || { id, name: data.name || '', category: data.category || '', created_at: new Date().toISOString() }),
+        ...data,
+        price: data.price != null ? Number(data.price) : existing?.price || 0
+      };
+      saveCustomMenuItem(updatedItem);
+      showToast('Updated menu item locally', 'success');
+      await syncInventoryData(true);
     }
   };
 
@@ -226,13 +336,14 @@ function App() {
       const res = await fetch(`${API_URL}/menu/${id}`, { method: 'DELETE' });
       if (res.ok) {
         showToast('Menu item deleted');
-        syncInventoryData();
       } else {
         showToast('Failed to delete menu item', 'error');
       }
     } catch (err) {
-      showToast('Network error deleting menu item', 'error');
+      showToast('Deleted menu item locally', 'success');
     }
+    removeCustomMenuItem(id);
+    await syncInventoryData(true);
   };
 
   // ------------ REQUEST HANDLERS ------------
@@ -255,44 +366,7 @@ function App() {
     }
   };
 
-  const handleApproveRequest = async (id: number) => {
-    try {
-      const res = await fetch(`${API_URL}/requests/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'approved' })
-      });
-      if (res.ok) {
-        showToast('Request approved and inventory decremented');
-        syncInventoryData();
-      } else {
-        const err = await res.json();
-        showToast(err.error || 'Approval failed', 'error');
-      }
-    } catch (err) {
-      showToast('Network error approving request', 'error');
-    }
-  };
-
-  const handleRejectRequest = async (id: number) => {
-    try {
-      const res = await fetch(`${API_URL}/requests/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'rejected' })
-      });
-      if (res.ok) {
-        showToast('Request rejected successfully');
-        syncInventoryData();
-      } else {
-        showToast('Failed to reject request', 'error');
-      }
-    } catch (err) {
-      showToast('Network error rejecting request', 'error');
-    }
-  };
-
-  const handleDeleteRequest = async (id: number) => {
+  /* const _handleDeleteRequest = async (id: number) => {
     try {
       const res = await fetch(`${API_URL}/requests/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -302,7 +376,7 @@ function App() {
     } catch (err) {
       showToast('Network error deleting request log', 'error');
     }
-  };
+  }; */
 
   // ------------ RECORD STOCK IN HANDLER ------------
   const handleRecordStockIn = async (data: any) => {
@@ -337,7 +411,6 @@ function App() {
 
   // Badges calculations for Sidebar nav items
   const lowStockCount = ingredients.filter(i => i.stock_level <= i.reorder_point).length;
-  const pendingRequestsCount = requests.filter(r => r.status === 'pending').length;
   const pendingReviewsCount = reviews.filter(r => !r.is_published).length;
 
   // ------------ REVIEW HANDLERS ------------
@@ -406,7 +479,6 @@ function App() {
             setSidebarOpen(false);
           }} 
           lowStockCount={lowStockCount}
-          pendingRequestsCount={pendingRequestsCount}
           pendingReviewsCount={pendingReviewsCount}
         />
       </div>
@@ -426,8 +498,6 @@ function App() {
           <Dashboard 
             analyticsData={analyticsData} 
             loading={loading}
-            onApproveRequest={handleApproveRequest}
-            onRejectRequest={handleRejectRequest}
             analyticsDays={analyticsDays}
             setAnalyticsDays={setAnalyticsDays}
             ingredients={ingredients}
@@ -444,6 +514,8 @@ function App() {
           />
         )}
 
+        {activeTab === 'tables' && <TableQrCodes />}
+
         {activeTab === 'menu' && (
           <ManageMenu 
             menuItems={menuItems} 
@@ -455,13 +527,10 @@ function App() {
         )}
 
         {activeTab === 'requests' && (
-          <ManageRequests 
-            requests={requests}
+          <ManageRequests
+            orders={orders}
+            menuItems={menuItems}
             ingredients={ingredients}
-            onCreateRequest={handleCreateRequest}
-            onApproveRequest={handleApproveRequest}
-            onRejectRequest={handleRejectRequest}
-            onDeleteRequest={handleDeleteRequest}
           />
         )}
 
@@ -469,6 +538,7 @@ function App() {
           <RecordStockIn 
             stockInLogs={stockInLogs}
             ingredients={ingredients}
+            requests={requests}
             onRecordStockIn={handleRecordStockIn}
           />
         )}

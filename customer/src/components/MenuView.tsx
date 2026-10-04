@@ -104,7 +104,7 @@ export default function MenuView(props: MenuViewProps) {
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
             <Heart size={14} fill={onlyFavorites ? 'currentColor' : 'none'} />
-            Favourites {favorites.length > 0 && `(${favorites.length})`}
+            Favorites {favorites.length > 0 && `(${favorites.length})`}
           </button>
           {filtered && (
             <button className="btn btn-ghost btn-sm" onClick={clearAll}>

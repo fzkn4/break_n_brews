@@ -12,7 +12,7 @@ import time
 from sqlalchemy import inspect, text
 
 from app import app
-from models import db
+from models import db, ensure_ingredient_lifespan_column
 
 MAX_WAIT_SECONDS = int(os.getenv('DB_WAIT_TIMEOUT', '60'))
 
@@ -47,6 +47,7 @@ def main():
         else:
             # Pick up tables added since the last seed without touching existing data.
             db.create_all()
+            ensure_ingredient_lifespan_column()
             print('Existing database detected — skipping seed.')
 
 

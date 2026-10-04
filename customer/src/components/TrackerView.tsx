@@ -1,7 +1,7 @@
 import { Ban, Check, ChefHat, ClipboardList, PartyPopper, Receipt, RotateCcw } from 'lucide-react';
 import ReviewForm from './ReviewForm';
 import type { ReviewDraft } from './ReviewForm';
-import { formatPrice, parseServerTime, summariseCustomizations, titleCase } from '../lib/catalog';
+import { formatPrice, parseServerTime, summariseOrderLine, titleCase } from '../lib/catalog';
 import type { Order, OrderMeta, OrderStatus } from '../types';
 
 interface TrackerViewProps {
@@ -175,7 +175,7 @@ export default function TrackerView({
               <div>
                 <div className="detail-grid__label">Serving</div>
                 <div className="detail-grid__value">
-                  {meta.dining === 'dine_in' ? `Dine in · Table ${meta.table || '—'}` : 'Takeaway'}
+                  {meta.dining === 'dine_in' ? `Dine in · Table ${meta.table || '—'}` : 'Takeout'}
                 </div>
               </div>
               <div>
@@ -193,7 +193,7 @@ export default function TrackerView({
                   <div className="summary-row__name">
                     {item.quantity} × {item.menu_item_name ?? 'Item'}
                   </div>
-                  <div className="summary-row__meta">{summariseCustomizations(item.customizations)}</div>
+                  <div className="summary-row__meta">{summariseOrderLine(item.size, item.customizations)}</div>
                 </div>
                 <span className="summary-row__price">{formatPrice(item.subtotal)}</span>
               </div>

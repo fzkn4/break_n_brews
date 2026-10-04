@@ -6,7 +6,7 @@ import {
   formatPrice,
   productImage,
   servingsAvailable,
-  summariseCustomizations
+  summariseOrderLine
 } from '../lib/catalog';
 import type { StockMap } from '../lib/catalog';
 import SmartImage from './SmartImage';
@@ -26,6 +26,7 @@ interface CartDrawerProps {
   stock: StockMap;
   reserved: Map<number, number>;
   details: CheckoutDetails;
+  tableLocked?: boolean;
   submitting: boolean;
   error: string | null;
   onDetailsChange: (details: CheckoutDetails) => void;
@@ -43,7 +44,7 @@ const PAYMENTS: { value: PaymentMethod; label: string }[] = [
 ];
 
 export default function CartDrawer(props: CartDrawerProps) {
-  const { cart, menuById, stock, reserved, details, submitting, error } = props;
+  const { cart, menuById, stock, reserved, details, submitting, error, tableLocked } = props;
   const [step, setStep] = useState<'review' | 'details'>('review');
   const [touched, setTouched] = useState(false);
 
@@ -113,7 +114,7 @@ export default function CartDrawer(props: CartDrawerProps) {
                     {item && <SmartImage className="cart-line__thumb" src={productImage(item)} alt="" />}
                     <div className="cart-line__main">
                       <span className="cart-line__name">{line.name}</span>
-                      <span className="cart-line__meta">{summariseCustomizations(line.customizations)}</span>
+                      <span className="cart-line__meta">{summariseOrderLine(line.size, line.customizations)}</span>
                       <div className="cart-line__foot">
                         <div className="stepper stepper--sm">
                           <button
@@ -161,6 +162,7 @@ export default function CartDrawer(props: CartDrawerProps) {
                   placeholder="e.g. Maria Santos"
                   value={details.name}
                   autoComplete="name"
+                  autoFocus
                   onChange={(event) => props.onDetailsChange({ ...details, name: event.target.value })}
                 />
                 {touched && nameError && <span className="form-error">{nameError}</span>}
@@ -171,11 +173,13 @@ export default function CartDrawer(props: CartDrawerProps) {
                 <div className="chip-row">
                   {(['dine_in', 'takeaway'] as DiningOption[]).map((option) => (
                     <button
+                      type="button"
                       key={option}
                       className={`chip chip--grow${details.dining === option ? ' is-active' : ''}`}
+                      disabled={Boolean(tableLocked)}
                       onClick={() => props.onDetailsChange({ ...details, dining: option })}
                     >
-                      {option === 'dine_in' ? 'Dine in' : 'Takeaway'}
+                      {option === 'dine_in' ? 'Dine in' : 'Takeout'}
                     </button>
                   ))}
                 </div>
@@ -192,6 +196,7 @@ export default function CartDrawer(props: CartDrawerProps) {
                     placeholder="e.g. 5"
                     value={details.table}
                     inputMode="numeric"
+                    readOnly={Boolean(tableLocked)}
                     onChange={(event) => props.onDetailsChange({ ...details, table: event.target.value })}
                   />
                   {touched && tableError && <span className="form-error">{tableError}</span>}
@@ -204,6 +209,7 @@ export default function CartDrawer(props: CartDrawerProps) {
                   {PAYMENTS.map((payment) => (
                     <button
                       key={payment.value}
+                      type="button"
                       className={`chip chip--grow${details.payment === payment.value ? ' is-active' : ''}`}
                       onClick={() => props.onDetailsChange({ ...details, payment: payment.value })}
                     >
@@ -221,7 +227,7 @@ export default function CartDrawer(props: CartDrawerProps) {
                       <div className="summary-row__name">
                         {line.quantity} × {line.name}
                       </div>
-                      <div className="summary-row__meta">{summariseCustomizations(line.customizations)}</div>
+                      <div className="summary-row__meta">{summariseOrderLine(line.size, line.customizations)}</div>
                     </div>
                     <span className="summary-row__price">{formatPrice(line.price * line.quantity)}</span>
                   </div>

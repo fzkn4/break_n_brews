@@ -11,23 +11,103 @@ import {
   UtensilsCrossed
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { CartItem, CustomizationLevel, Ingredient, MenuItem } from '../types';
+import type { CartItem, CustomizationLevel, Ingredient, MenuItem, ProductSize, RecipeIngredient } from '../types';
 
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+/** Phones that open the menu from a table QR must call the computer that served the page, not their own localhost. */
+export const API_URL =
+  import.meta.env.VITE_API_URL ||
+  `http://${typeof window === 'undefined' ? 'localhost' : window.location.hostname}:5001/api`;
 
-/** Kept in sync with the multiplier table in backend/app.py `place_order()`. */
-export const CUSTOMIZATION_LEVELS: CustomizationLevel[] = ['None', 'Less', 'Regular', 'Extra'];
+/** Kept in sync with LEVEL_MULTIPLIERS in backend/models.py. */
+export const CUSTOMIZATION_LEVELS: CustomizationLevel[] = ['Less', 'Regular', 'Extra'];
+
+export const PRODUCT_SIZES: ProductSize[] = ['Small', 'Regular', 'Large'];
 
 export const LEVEL_MULTIPLIER: Record<CustomizationLevel, number> = {
+  Less: 0.5,
+  Regular: 1.0,
+  Extra: 1.5
+};
+
+const LEGACY_LEVEL_MULTIPLIER: Record<string, number> = {
   None: 0.0,
   Less: 0.5,
   Regular: 1.0,
   Extra: 1.5
 };
 
-/** Admin and staff portals both render money as `$0.00`; the customer sees the same figure. */
+export function isSizeableCategory(category: string): boolean {
+  const c = category.toLowerCase().trim();
+  if (/alcohol|beer|wine|can/.test(c)) return false;
+  return (
+    c === 'coffee' ||
+    c === 'coffees' ||
+    c === 'iced coffee' ||
+    c === 'iced coffees' ||
+    c.includes('platter') ||
+    c.includes('rice bowl') ||
+    c.includes('rice meal')
+  );
+}
+
+export function offeredSizesOf(item: {
+  offered_sizes?: ProductSize[] | null;
+  category: string;
+  supports_sizes?: boolean;
+}): ProductSize[] {
+  if (Array.isArray(item.offered_sizes)) {
+    const mapped = item.offered_sizes.map((s) => ((s as any) === 'Medium' ? 'Regular' : s));
+    return PRODUCT_SIZES.filter((size) => mapped.includes(size));
+  }
+  if (item.supports_sizes === false) return [];
+  if (item.supports_sizes || isSizeableCategory(item.category)) return [...PRODUCT_SIZES];
+  return [];
+}
+
+/** Regular when it is offered, otherwise the first size the admin turned on. */
+export function defaultProductSize(item: {
+  offered_sizes?: ProductSize[] | null;
+  category: string;
+  supports_sizes?: boolean;
+}): ProductSize | undefined {
+  const offered = offeredSizesOf(item);
+  if (offered.length === 0) return undefined;
+  return offered.includes('Regular') ? 'Regular' : offered[0];
+}
+
+export function getItemPrice(item: MenuItem, size?: ProductSize | null): number {
+  if (size === 'Small' && item.price_small != null) return item.price_small;
+  if ((size === 'Regular' || (size as any) === 'Medium') && item.price_medium != null) return item.price_medium;
+  if (size === 'Large' && item.price_large != null) return item.price_large;
+  return item.price;
+}
+
+export function recipeQtyForSize(recipe: RecipeIngredient, size: ProductSize = 'Regular'): number {
+  const base = recipe.default_quantity ?? 0;
+  if (size === 'Small') {
+    return recipe.qty_small != null ? recipe.qty_small : base * 0.75;
+  }
+  if (size === 'Large') {
+    return recipe.qty_large != null ? recipe.qty_large : base * 1.25;
+  }
+  return recipe.qty_medium != null ? recipe.qty_medium : base;
+}
+
+/** Display recipe amounts as g/ml where stock is tracked in kg/L. */
+export function formatRecipeAmount(qty: number, unit: string): string {
+  if (unit === 'kg') return `${Math.round(qty * 1000)} g`;
+  if (unit === 'L') return `${Math.round(qty * 1000)} ml`;
+  if (unit === 'mg') return `${qty} mg`;
+  return `${qty} ${unit}`;
+}
+
+function levelMultiplier(level: string): number {
+  return LEGACY_LEVEL_MULTIPLIER[level] ?? LEVEL_MULTIPLIER[level as CustomizationLevel] ?? 1.0;
+}
+
+/** All portals render money as Philippine peso, e.g. `₱0.00`. */
 export function formatPrice(amount: number): string {
-  return `$${(Number.isFinite(amount) ? amount : 0).toFixed(2)}`;
+  return `₱${(Number.isFinite(amount) ? amount : 0).toFixed(2)}`;
 }
 
 export function titleCase(value: string): string {
@@ -103,12 +183,13 @@ export function stockMapFrom(ingredients: Ingredient[]): StockMap {
 /** How much of each ingredient one serving of `item` consumes at the given customization levels. */
 export function requirementsFor(
   item: MenuItem,
-  levels: Record<number, CustomizationLevel> = {}
+  levels: Record<number, CustomizationLevel | string> = {},
+  size: ProductSize = 'Regular'
 ): Map<number, number> {
   const needs = new Map<number, number>();
   for (const recipe of item.ingredients) {
     const level = recipe.is_customizable ? levels[recipe.ingredient_id] ?? 'Regular' : 'Regular';
-    const needed = recipe.default_quantity * LEVEL_MULTIPLIER[level];
+    const needed = recipeQtyForSize(recipe, size) * levelMultiplier(String(level));
     if (needed > 0) needs.set(recipe.ingredient_id, (needs.get(recipe.ingredient_id) ?? 0) + needed);
   }
   return needs;
@@ -121,8 +202,13 @@ export function reservedByCart(cart: CartItem[], menuById: Map<number, MenuItem>
     const item = menuById.get(line.menuItemId);
     if (!item) continue;
     const levels: Record<number, CustomizationLevel> = {};
-    for (const custom of line.customizations) levels[custom.ingredient_id] = custom.level;
-    for (const [id, perServing] of requirementsFor(item, levels)) {
+    for (const custom of line.customizations) {
+      if (custom.level === 'Less' || custom.level === 'Regular' || custom.level === 'Extra') {
+        levels[custom.ingredient_id] = custom.level;
+      }
+    }
+    const size = line.size ?? 'Regular';
+    for (const [id, perServing] of requirementsFor(item, levels, size)) {
       reserved.set(id, (reserved.get(id) ?? 0) + perServing * line.quantity);
     }
   }
@@ -138,9 +224,10 @@ export function servingsAvailable(
   item: MenuItem,
   stock: StockMap,
   reserved: Map<number, number> = new Map(),
-  levels: Record<number, CustomizationLevel> = {}
+  levels: Record<number, CustomizationLevel | string> = {},
+  size: ProductSize = 'Regular'
 ): number {
-  const needs = requirementsFor(item, levels);
+  const needs = requirementsFor(item, levels, size);
   if (needs.size === 0) return Infinity;
   let servings = Infinity;
   for (const [ingredientId, perServing] of needs) {
@@ -161,7 +248,7 @@ export type Availability =
 export function availabilityOf(item: MenuItem, stock: StockMap, reserved: Map<number, number>): Availability {
   if (!item.is_available) return { kind: 'unavailable' };
   if (stock.size === 0) return { kind: 'ok' }; // stock unknown; let the backend be the judge
-  const left = servingsAvailable(item, stock, reserved);
+  const left = servingsAvailable(item, stock, reserved, {}, defaultProductSize(item) ?? 'Regular');
   if (left <= 0) return { kind: 'sold_out' };
   if (left <= 5) return { kind: 'low', left };
   return { kind: 'ok' };
@@ -169,12 +256,17 @@ export function availabilityOf(item: MenuItem, stock: StockMap, reserved: Map<nu
 
 // ----- Cart helpers --------------------------------------------------------
 
-export function cartLineId(menuItemId: number, levels: Record<number, CustomizationLevel>): string {
+export function cartLineId(
+  menuItemId: number,
+  levels: Record<number, CustomizationLevel | string>,
+  size: ProductSize = 'Regular'
+): string {
+  const sizePart = size !== 'Regular' ? `@${size}` : '';
   const key = Object.entries(levels)
     .sort(([a], [b]) => Number(a) - Number(b))
     .map(([id, level]) => `${id}:${level}`)
     .join('-');
-  return key ? `${menuItemId}-${key}` : `${menuItemId}`;
+  return key ? `${menuItemId}${sizePart}-${key}` : `${menuItemId}${sizePart}`;
 }
 
 export function cartTotal(cart: CartItem[]): number {
@@ -189,6 +281,14 @@ export function summariseCustomizations(customs: { name: string; level: string }
   const notable = customs.filter((c) => c.level !== 'Regular');
   if (notable.length === 0) return 'Standard recipe';
   return notable.map((c) => `${c.level} ${c.name}`).join(' · ');
+}
+
+export function summariseOrderLine(
+  size: string | null | undefined,
+  customs: { name: string; level: string }[]
+): string {
+  const custom = summariseCustomizations(customs);
+  return size ? `${size} · ${custom}` : custom;
 }
 
 // ----- Timestamps ----------------------------------------------------------

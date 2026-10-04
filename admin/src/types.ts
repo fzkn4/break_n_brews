@@ -6,6 +6,7 @@ export interface Ingredient {
   unit: string;
   reorder_point: number;
   cost_per_unit: number;
+  lifespan_days: number | null;
   created_at: string;
 }
 
@@ -14,14 +15,22 @@ export interface MenuItem {
   name: string;
   category: string;
   price: number;
+  price_small?: number | null;
+  price_medium?: number | null;
+  price_large?: number | null;
   is_available: boolean;
   image_url: string | null;
   created_at: string;
+  offered_sizes?: ('Small' | 'Regular' | 'Large')[];
+  supports_sizes?: boolean;
   ingredients?: {
     ingredient_id: number;
     name: string;
     unit: string;
     default_quantity: number;
+    qty_small?: number | null;
+    qty_medium?: number | null;
+    qty_large?: number | null;
     is_customizable: boolean;
   }[];
 }
@@ -93,6 +102,27 @@ export interface ReportData {
     menu_item: string;
     revenue: number;
   }[];
+  stock_by_category?: {
+    category: string;
+    item_count: number;
+    total_stock_value: number;
+    low_stock_count: number;
+    items: ReportData['inventory_health'];
+  }[];
+  stock_per_order?: {
+    order_id: number;
+    created_at: string;
+    status: string;
+    total_amount: number;
+    deductions: {
+      ingredient_name: string;
+      unit: string;
+      amount: number;
+      menu_item: string;
+      size: string;
+      level: string;
+    }[];
+  }[];
 }
 
 export interface Review {
@@ -110,4 +140,33 @@ export interface Subscriber {
   id: number;
   email: string;
   created_at: string;
+}
+
+export type OrderStatus = 'pending' | 'preparing' | 'completed' | 'cancelled';
+export type CustomizationLevel = 'None' | 'Less' | 'Regular' | 'Extra';
+
+export interface OrderItemCustomization {
+  ingredient_id: number;
+  name: string;
+  level: CustomizationLevel;
+}
+
+export interface OrderItem {
+  id: number;
+  order_id: number;
+  menu_item_id: number;
+  menu_item_name: string | null;
+  quantity: number;
+  price_at_order: number;
+  subtotal: number;
+  size?: string | null;
+  customizations: OrderItemCustomization[];
+}
+
+export interface Order {
+  id: number;
+  status: OrderStatus;
+  total_amount: number;
+  created_at: string;
+  items: OrderItem[];
 }

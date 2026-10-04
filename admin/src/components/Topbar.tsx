@@ -38,10 +38,10 @@ export const Topbar: React.FC<TopbarProps> = ({
       case 'dashboard': return 'Dashboard Overview';
       case 'ingredients': return 'Manage Ingredients';
       case 'menu': return 'Manage Cafe Menu';
-      case 'requests': return 'Manage Staff Requests';
+      case 'requests': return 'Manage Customer Requests';
       case 'stockin': return 'Record Stock In';
       case 'reviews': return 'Reviews & Subscribers';
-      case 'reports': return 'View Reports';
+      case 'reports': return 'View Report/Inventory';
       default: return 'Break & Brews';
     }
   };
@@ -60,7 +60,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   const email = currentUser?.email || 'marcus@breakandbrews.com';
 
   return (
-    <header style={styles.topbar}>
+    <header className="topbar" style={styles.topbar}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <button 
           onClick={onToggleSidebar}
@@ -153,6 +153,7 @@ const styles = {
     position: 'sticky' as const,
     top: 0,
     zIndex: 90,
+    flexShrink: 0,
     backdropFilter: 'blur(8px)'
   },
   title: {

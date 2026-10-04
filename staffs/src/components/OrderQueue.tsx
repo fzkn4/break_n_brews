@@ -2,37 +2,35 @@ import React, { useState } from 'react';
 import { 
   Play, 
   Check, 
-  Plus, 
-  ShoppingBag, 
-  AlertTriangle, 
   ChevronRight, 
   ChevronLeft, 
-  Info, 
-  X,
-  RefreshCw
+  RefreshCw,
+  Info
 } from 'lucide-react';
 import type { Order, Ingredient } from '../types';
+
+function guestLine(order: { table_label?: string | null; customer_name?: string | null; channel?: string | null }): string | null {
+  const parts: string[] = [];
+  if (order.table_label) parts.push(`Table ${order.table_label}`);
+  if (order.customer_name) parts.push(order.customer_name);
+  if (order.channel === 'qr') parts.push('QR order');
+  return parts.length ? parts.join(' · ') : null;
+}
 
 interface OrderQueueProps {
   orders: Order[];
   ingredients: Ingredient[];
   menuItems: any[];
   onUpdateStatus: (id: number, status: 'preparing' | 'completed' | 'cancelled') => void;
-  onRecordSale: (menuItemId: number, quantity: number, serveImmediately: boolean) => void;
-  onRequestIngredient: (ingredientId: number, quantity: number, notes: string) => void;
+  onRecordSale?: any;
+  onRequestIngredient?: any;
   loading: boolean;
   onRefresh: () => void;
 }
 
-
-
 export const OrderQueue: React.FC<OrderQueueProps> = ({
   orders,
-  ingredients,
-  menuItems,
   onUpdateStatus,
-  onRecordSale,
-  onRequestIngredient,
   loading,
   onRefresh,
 }) => {
@@ -41,17 +39,6 @@ export const OrderQueue: React.FC<OrderQueueProps> = ({
   const preparingOrders = orders.filter(o => o.status === 'preparing');
 
   const [activePendingIndex, setActivePendingIndex] = useState(0);
-
-  // Sale Form States
-  const [selectedProductId, setSelectedProductId] = useState<number | ''>('');
-  const [quantitySold, setQuantitySold] = useState<number>(1);
-  const [serveImmediately, setServeImmediately] = useState<boolean>(false);
-
-  // Request Supply Modal States
-  const [requestModalOpen, setRequestModalOpen] = useState(false);
-  const [requestingIngredientId, setRequestingIngredientId] = useState<number | ''>('');
-  const [requestQuantity, setRequestQuantity] = useState<number>(1);
-  const [requestNotes, setRequestNotes] = useState<string>('');
 
   // Handle cycle through pending stack
   const handleNextPending = () => {
@@ -66,77 +53,12 @@ export const OrderQueue: React.FC<OrderQueueProps> = ({
     }
   };
 
-  // Open request modal with a pre-filled ingredient
-  const openRequestModal = (ingredientId?: number) => {
-    if (ingredientId) {
-      setRequestingIngredientId(ingredientId);
-    } else if (ingredients.length > 0) {
-      setRequestingIngredientId(ingredients[0].id);
-    }
-    setRequestQuantity(1);
-    setRequestNotes('');
-    setRequestModalOpen(true);
-  };
-
-  const handleRequestSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (requestingIngredientId) {
-      onRequestIngredient(Number(requestingIngredientId), requestQuantity, requestNotes);
-      setRequestModalOpen(false);
-    }
-  };
-
-  // Calculate Ingredient Impact
-  const getIngredientImpacts = () => {
-    if (selectedProductId === '') return { impacts: [], isInsufficient: false };
-
-    const selectedItem = menuItems.find(item => item.id === Number(selectedProductId));
-    const recipe = selectedItem?.ingredients || [];
-    let isInsufficient = false;
-
-    const impacts = recipe.map((req: any) => {
-      const dbIng = ingredients.find(i => i.id === req.ingredient_id);
-      const currentStock = dbIng ? dbIng.stock_level : 0;
-      const totalNeeded = req.default_quantity * quantitySold;
-      const projectedStock = Math.max(0, currentStock - totalNeeded);
-      const insufficient = currentStock < totalNeeded;
-
-      if (insufficient) {
-        isInsufficient = true;
-      }
-
-      return {
-        ingId: req.ingredient_id,
-        name: req.name,
-        qty: req.default_quantity,
-        unit: req.unit,
-        currentStock,
-        totalNeeded,
-        projectedStock,
-        insufficient
-      };
-    });
-
-    return { impacts, isInsufficient };
-  };
-
-  const { impacts, isInsufficient } = getIngredientImpacts();
-
-  const handleRecordSaleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (selectedProductId !== '' && !isInsufficient) {
-      onRecordSale(Number(selectedProductId), quantitySold, serveImmediately);
-      setSelectedProductId('');
-      setQuantitySold(1);
-      setServeImmediately(false);
-    }
-  };
-
   // Helper to format order items string
   const getOrderItemsString = (order: Order) => {
     if (!order.items || order.items.length === 0) return 'No items';
     return order.items.map(i => {
       let label = `${i.quantity}x ${i.menu_item_name || 'Item'}`;
+      if (i.size) label += ` · ${i.size}`;
       if (i.customizations) {
         try {
           const parsed = typeof i.customizations === 'string' ? JSON.parse(i.customizations) : i.customizations;
@@ -193,6 +115,11 @@ export const OrderQueue: React.FC<OrderQueueProps> = ({
                       <h3 style={styles.cardItemName}>
                         {order.items && order.items[0]?.menu_item_name || 'Custom Brew'}
                       </h3>
+                      {guestLine(order) && (
+                        <span style={{ display: 'block', marginTop: 4, fontSize: '0.82rem', fontWeight: 700 }}>
+                          {guestLine(order)}
+                        </span>
+                      )}
                       <span style={styles.cardQuantity}>Quantity: {order.items && order.items[0]?.quantity || 1}</span>
                     </div>
                     <div style={styles.statusPreparing}>
@@ -210,22 +137,7 @@ export const OrderQueue: React.FC<OrderQueueProps> = ({
                   </div>
 
                   {/* Ticket Actions */}
-                  <div style={styles.cardActions}>
-                    <button 
-                      onClick={() => {
-                        const firstItem = order.items?.[0];
-                        const menuItem = firstItem ? menuItems.find(mi => mi.id === firstItem.menu_item_id) : null;
-                        const recipe = menuItem?.ingredients || [];
-                        const primaryIngId = recipe?.[0]?.ingredient_id;
-                        openRequestModal(primaryIngId);
-                      }} 
-                      className="btn" 
-                      style={styles.btnRequest}
-                    >
-                      <Plus size={16} />
-                      Request Ingredient
-                    </button>
-                    
+                  <div style={styles.cardActionsSingle}>
                     <button 
                       onClick={() => onUpdateStatus(order.id, 'completed')} 
                       className="btn" 
@@ -301,6 +213,11 @@ export const OrderQueue: React.FC<OrderQueueProps> = ({
                           <h3 style={styles.cardItemName}>
                             {order.items && order.items[0]?.menu_item_name || 'Pending Brew'}
                           </h3>
+                          {guestLine(order) && (
+                            <span style={{ display: 'block', marginTop: 4, fontSize: '0.82rem', fontWeight: 700 }}>
+                              {guestLine(order)}
+                            </span>
+                          )}
                           <span style={styles.cardQuantity}>Quantity: {order.items && order.items[0]?.quantity || 1}</span>
                         </div>
                         <div style={styles.statusPending}>
@@ -351,228 +268,6 @@ export const OrderQueue: React.FC<OrderQueueProps> = ({
         </div>
 
       </div>
-
-      {/* Divider */}
-      <hr style={styles.sectionDivider} />
-
-      {/* Bottom Section: Process Order POS */}
-      <div style={{ marginTop: '40px' }}>
-        <h2 style={styles.processTitle}>PROCESS ORDER</h2>
-        
-        <div style={styles.processGrid}>
-          {/* LEFT: Sale Form */}
-          <div className="glass-card" style={{ padding: '32px' }}>
-            <div style={styles.formTitleContainer}>
-              <div style={styles.iconCircle}>
-                <ShoppingBag size={20} color="var(--primary-brown)" />
-              </div>
-              <h3 style={styles.formTitle}>Sale Form</h3>
-            </div>
-
-            <form onSubmit={handleRecordSaleSubmit} style={styles.form}>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Coffee Product</label>
-                <select 
-                  value={selectedProductId} 
-                  onChange={(e) => setSelectedProductId(e.target.value === '' ? '' : Number(e.target.value))}
-                  style={styles.select}
-                  required
-                >
-                  <option value="">Select a coffee product</option>
-                  {menuItems.filter(item => item.is_available).map(item => (
-                    <option key={item.id} value={item.id}>
-                      {item.name} (${parseFloat(item.price).toFixed(2)})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Quantity Sold</label>
-                <input 
-                  type="number" 
-                  min="1" 
-                  max="50"
-                  value={quantitySold} 
-                  onChange={(e) => setQuantitySold(Math.max(1, parseInt(e.target.value) || 1))}
-                  style={styles.input}
-                  required
-                />
-              </div>
-
-              <div style={styles.checkboxContainer}>
-                <label style={styles.checkboxLabel}>
-                  <input 
-                    type="checkbox" 
-                    checked={serveImmediately}
-                    onChange={(e) => setServeImmediately(e.target.checked)}
-                    style={styles.checkbox}
-                  />
-                  Serve immediately (Skip Queue)
-                </label>
-              </div>
-
-              <button 
-                type="submit" 
-                className="btn" 
-                style={{
-                  ...styles.btnRecord,
-                  opacity: selectedProductId === '' || isInsufficient ? 0.6 : 1,
-                  cursor: selectedProductId === '' || isInsufficient ? 'not-allowed' : 'pointer'
-                }}
-                disabled={selectedProductId === '' || isInsufficient}
-              >
-                Record Sale
-              </button>
-            </form>
-          </div>
-
-          {/* RIGHT: Ingredient Impact */}
-          <div className="glass-card" style={{ padding: '32px', display: 'flex', flexDirection: 'column' }}>
-            <div style={styles.formTitleContainer}>
-              <div style={styles.iconCircle}>
-                <Info size={20} color="var(--primary-brown)" />
-              </div>
-              <h3 style={styles.formTitle}>Ingredient Impact</h3>
-            </div>
-
-            {selectedProductId === '' ? (
-              <div style={styles.impactPlaceholder}>
-                <div style={styles.bowlIllustration}>
-                  {/* CSS-based recipe bowl illustration */}
-                  <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
-                    <path d="M12 32C12 43.0457 20.9543 52 32 52C43.0457 52 52 43.0457 52 32H12Z" fill="#e8ded1" stroke="var(--primary-brown)" strokeWidth="3" />
-                    <circle cx="24" cy="24" r="3" fill="#c49a6c" />
-                    <circle cx="38" cy="22" r="4" fill="#a07855" />
-                    <circle cx="31" cy="18" r="2.5" fill="#8e6543" />
-                    <line x1="16" y1="32" x2="48" y2="32" stroke="var(--primary-brown)" strokeWidth="3" />
-                  </svg>
-                </div>
-                <p style={styles.placeholderText}>
-                  Select a coffee product to view ingredient details
-                </p>
-              </div>
-            ) : (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <div style={styles.impactList}>
-                  {impacts.map((imp: any) => (
-                    <div key={imp.ingId} style={styles.impactRow}>
-                      <div>
-                        <p style={styles.impactIngName}>{imp.name}</p>
-                        <p style={styles.impactDetail}>
-                          Need: {imp.totalNeeded.toFixed(3)} {imp.unit} | Stock: {imp.currentStock.toFixed(2)} {imp.unit}
-                        </p>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{
-                          ...styles.impactBadge,
-                          color: imp.insufficient ? '#ef4444' : '#10b981',
-                          backgroundColor: imp.insufficient ? 'rgba(239, 68, 68, 0.08)' : 'rgba(16, 185, 129, 0.08)'
-                        }}>
-                          {imp.insufficient ? 'Shortage' : `-> ${imp.projectedStock.toFixed(2)} ${imp.unit}`}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Status Indicator */}
-                <div style={{ marginTop: 'auto', paddingTop: '20px' }}>
-                  {isInsufficient ? (
-                    <div style={styles.errorBanner}>
-                      <AlertTriangle size={18} />
-                      <span>Insufficient stock! Restock or adjust quantity.</span>
-                    </div>
-                  ) : (
-                    <div style={styles.successBanner}>
-                      <Check size={18} />
-                      <span>Inventory levels are sufficient.</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* REQUEST INGREDIENT MODAL */}
-      {requestModalOpen && (
-        <div className="modal-overlay" style={styles.modalOverlay}>
-          <div className="modal-content" style={styles.modalContent}>
-            <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>Request Ingredients</h3>
-              <button onClick={() => setRequestModalOpen(false)} style={styles.closeBtn}>
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleRequestSubmit} style={{ padding: '24px' }}>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Select Ingredient</label>
-                <select
-                  value={requestingIngredientId}
-                  onChange={(e) => setRequestingIngredientId(Number(e.target.value))}
-                  style={styles.select}
-                  required
-                >
-                  {ingredients.map(ing => (
-                    <option key={ing.id} value={ing.id}>
-                      {ing.name} ({ing.stock_level} {ing.unit} currently)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Quantity to Request</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
-                    type="number"
-                    min="0.1"
-                    step="0.1"
-                    value={requestQuantity}
-                    onChange={(e) => setRequestQuantity(Math.max(0.1, parseFloat(e.target.value) || 1))}
-                    style={{ ...styles.input, flex: 1 }}
-                    required
-                  />
-                  <span style={{ fontWeight: '600', color: 'var(--text-muted)' }}>
-                    {ingredients.find(i => i.id === requestingIngredientId)?.unit || ''}
-                  </span>
-                </div>
-              </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Notes / Urgency</label>
-                <textarea
-                  value={requestNotes}
-                  onChange={(e) => setRequestNotes(e.target.value)}
-                  placeholder="E.g. Running low during rush hour!"
-                  style={styles.textarea}
-                  rows={3}
-                />
-              </div>
-
-              <div style={styles.modalActions}>
-                <button 
-                  type="button" 
-                  onClick={() => setRequestModalOpen(false)} 
-                  className="btn btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit" 
-                  className="btn" 
-                  style={styles.btnRecord}
-                >
-                  Submit Request
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
