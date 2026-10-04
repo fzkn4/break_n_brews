@@ -5,7 +5,7 @@ from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from sqlalchemy import inspect, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 
 db = SQLAlchemy()
 
@@ -168,17 +168,28 @@ def is_low_stock(ingredient) -> bool:
     return float(ingredient.stock_level or 0) <= float(ingredient.reorder_point or 0)
 
 
+def _add_column(conn, table, column, ddl):
+    """ALTER TABLE ... ADD COLUMN that tolerates another gunicorn worker adding it at the same moment."""
+    if conn.dialect.name == 'postgresql':
+        conn.execute(text(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {ddl}'))
+    else:
+        conn.execute(text(f'ALTER TABLE {table} ADD COLUMN {column} {ddl}'))
+    print(f'Added {table}.{column} column')
+
+
 def ensure_notification_schema():
     """Create the email notification tables and the low-stock alert marker on existing databases."""
     insp = inspect(db.engine)
     for model in (NotificationRecipient, StoreSettings, EmailLog):
-        model.__table__.create(db.engine, checkfirst=True)
+        try:
+            model.__table__.create(db.engine, checkfirst=True)
+        except (ProgrammingError, IntegrityError):
+            pass  # created by a concurrent worker between the check and the CREATE
     if insp.has_table('ingredients'):
         columns = {col['name'] for col in insp.get_columns('ingredients')}
         if 'low_stock_alerted_at' not in columns:
             with db.engine.begin() as conn:
-                conn.execute(text('ALTER TABLE ingredients ADD COLUMN low_stock_alerted_at TIMESTAMP'))
-            print('Added ingredients.low_stock_alerted_at column')
+                _add_column(conn, 'ingredients', 'low_stock_alerted_at', 'TIMESTAMP')
     ensure_subscriber_columns()
 
 
@@ -202,8 +213,7 @@ def ensure_subscriber_columns():
     with db.engine.begin() as conn:
         for column, ddl in added.items():
             if column not in columns:
-                conn.execute(text(f'ALTER TABLE subscribers ADD COLUMN {column} {ddl}'))
-                print(f'Added subscribers.{column} column')
+                _add_column(conn, 'subscribers', column, ddl)
         ids = [row[0] for row in conn.execute(text('SELECT id FROM subscribers WHERE unsubscribe_token IS NULL'))]
         for sub_id in ids:
             conn.execute(text('UPDATE subscribers SET unsubscribe_token = :t WHERE id = :id'),
