@@ -97,6 +97,22 @@ asks for `?all=1` to see the queue and `PUT /api/reviews/<id>` to publish. One r
 enforced server-side, so a guest cannot flood the wall from a single visit. The customer portal also
 remembers which orders it has reviewed in `bb_reviewed_orders` to hide the prompt after submitting.
 
+### Email notifications (`backend/notifications.py`, `mailer.py`, `daily_report.py`)
+
+- Gmail SMTP credentials come **only** from `SMTP_USER` / `SMTP_APP_PASSWORD` in `backend/.env` (see
+  `backend/.env.example`). They are never stored in the DB or returned by the API; `/api/notifications/settings`
+  exposes only `configured` and a masked sender. Recipients, toggles, closing time and time zone live in the DB
+  (`notification_recipients`, single-row `store_settings`) and are edited in admin's Email Notifications tab.
+- Low stock = `stock_level <= reorder_point` (`is_low_stock()`). `safe_check_low_stock()` runs after every stock
+  change and emails once per ingredient (`Ingredient.low_stock_alerted_at`), re-arming after a restock.
+- **Auto-pause:** while any recipe ingredient is low, `MenuItem.to_dict()` reports `stock_paused: true` and
+  `POST /api/orders` rejects the item. This is separate from the manual `is_available` switch and lifts on restock.
+  Customer and staff portals show "Unavailable at the moment".
+- The end-of-day report is sent by a background thread (started on the first request) shortly after the store's
+  closing time. A business day is the 24h ending at closing. `store_settings.last_report_key` is claimed with a
+  conditional UPDATE, so the debug reloader's second process cannot double-send. Every send is recorded in
+  `email_logs`, and delivery runs on a thread so requests never wait on Gmail.
+
 ### Frontend conventions
 
 - Each portal is a single stateful `App.tsx` holding all data state and all fetch handlers, passing them down as
@@ -131,7 +147,8 @@ remembers which orders it has reviewed in `bb_reviewed_orders` to hide the promp
 ### API surface (`backend/app.py`, ~600 lines, all routes in one file)
 
 `/api/ingredients`, `/api/menu`, `/api/requests`, `/api/stockin`, `/api/staff`, `/api/orders`, `/api/reviews`
-(CRUD subsets), plus `/api/login`, `/api/subscribers` (newsletter signups),
+(CRUD subsets), plus `/api/login`, `/api/subscribers` (newsletter signups), `/api/notifications/*`
+(email settings, recipients, log, test send, low-stock digest, daily-report preview/send),
 `/api/analytics?days=N` (KPIs, revenue trend, category distribution, low stock) and
 `/api/reports` (inventory health, supplier summary, sales breakdown). `clean_decimal()` recursively converts
 `Decimal` to `float` before every JSON response — use it on any new response containing money.

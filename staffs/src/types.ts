@@ -19,6 +19,9 @@ export interface MenuItem {
   price_medium?: number | null;
   price_large?: number | null;
   is_available: boolean;
+  /** Set by the backend while a recipe ingredient is at/below its reorder point; lifts on restock. */
+  stock_paused?: boolean;
+  paused_ingredients?: string[];
   image_url: string | null;
   created_at: string;
   offered_sizes?: ('Small' | 'Regular' | 'Large')[];

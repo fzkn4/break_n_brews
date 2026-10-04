@@ -7,7 +7,8 @@ import {
   PlusCircle, 
   BarChart3,
   MessageSquare,
-  QrCode
+  QrCode,
+  Mail
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -31,7 +32,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'requests', label: 'Manage Customer Requests', icon: ClipboardList },
     { id: 'stockin', label: 'Record Stock In', icon: PlusCircle },
     { id: 'reviews', label: 'Reviews', icon: MessageSquare, badge: pendingReviewsCount, badgeColor: 'bg-blue' },
-    { id: 'reports', label: 'View Report/Inventory', icon: BarChart3 }
+    { id: 'reports', label: 'View Report/Inventory', icon: BarChart3 },
+    { id: 'notifications', label: 'Email Notifications', icon: Mail }
   ];
 
   return (

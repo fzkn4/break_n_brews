@@ -303,7 +303,8 @@ export const WalkInMenu: React.FC<WalkInMenuProps> = ({
             <div className="walkin-grid">
               {visibleProducts.map((item) => {
                 const selected = selectedProductId === item.id;
-                const unavailable = !item.is_available;
+                const paused = Boolean(item.stock_paused);
+                const unavailable = !item.is_available || paused;
                 return (
                   <button
                     type="button"
@@ -326,7 +327,14 @@ export const WalkInMenu: React.FC<WalkInMenuProps> = ({
                           <Check size={14} />
                         </span>
                       )}
-                      {unavailable && <span className="walkin-card__sold">Unavailable</span>}
+                      {unavailable && (
+                        <span
+                          className="walkin-card__sold"
+                          title={paused ? `Low stock: ${(item.paused_ingredients || []).join(', ')}` : undefined}
+                        >
+                          {paused ? 'Unavailable at the moment' : 'Unavailable'}
+                        </span>
+                      )}
                     </div>
                     <div className="walkin-card__body">
                       <h4 className="walkin-card__name">{item.name}</h4>

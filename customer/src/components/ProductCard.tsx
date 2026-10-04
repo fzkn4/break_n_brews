@@ -25,6 +25,9 @@ export default function ProductCard({ item, availability, isFavorite, onOpen, on
         )}
         {availability.kind === 'sold_out' && <span className="stock-pill stock-pill--out">Sold out</span>}
         {availability.kind === 'unavailable' && <span className="stock-pill stock-pill--out">Unavailable</span>}
+        {availability.kind === 'paused' && (
+          <span className="stock-pill stock-pill--out">Unavailable at the moment</span>
+        )}
 
         <button
           className="product-card__fav"
@@ -50,7 +53,7 @@ export default function ProductCard({ item, availability, isFavorite, onOpen, on
             disabled={!orderable}
           >
             {orderable ? <Plus size={15} /> : <Ban size={15} />}
-            {orderable ? 'Add' : 'Sold out'}
+            {orderable ? 'Add' : availability.kind === 'sold_out' ? 'Sold out' : 'Unavailable'}
           </button>
         </div>
       </div>

@@ -241,12 +241,14 @@ export function servingsAvailable(
 
 export type Availability =
   | { kind: 'unavailable' }
+  | { kind: 'paused' }
   | { kind: 'sold_out' }
   | { kind: 'low'; left: number }
   | { kind: 'ok' };
 
 export function availabilityOf(item: MenuItem, stock: StockMap, reserved: Map<number, number>): Availability {
   if (!item.is_available) return { kind: 'unavailable' };
+  if (item.stock_paused) return { kind: 'paused' };
   if (stock.size === 0) return { kind: 'ok' }; // stock unknown; let the backend be the judge
   const left = servingsAvailable(item, stock, reserved, {}, defaultProductSize(item) ?? 'Regular');
   if (left <= 0) return { kind: 'sold_out' };

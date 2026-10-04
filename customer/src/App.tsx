@@ -242,13 +242,24 @@ function App() {
     [historyIds, orders]
   );
 
-  // Menu items pulled by the admin should not linger in the cart.
+  // Menu items pulled by the admin, or paused for low stock, should not linger in the cart.
   useEffect(() => {
     if (menuItems.length === 0) return;
     setCart((current) => {
-      const kept = current.filter((line) => menuById.has(line.menuItemId));
+      const kept = current.filter((line) => {
+        const item = menuById.get(line.menuItemId);
+        return item && !item.stock_paused;
+      });
       if (kept.length === current.length) return current;
-      notify('Some items are no longer available and were removed from your cart.', 'info');
+      const paused = current
+        .filter((line) => menuById.get(line.menuItemId)?.stock_paused)
+        .map((line) => line.name);
+      notify(
+        paused.length
+          ? `${[...new Set(paused)].join(', ')} ${paused.length === 1 ? 'is' : 'are'} unavailable at the moment and ${paused.length === 1 ? 'was' : 'were'} removed from your cart.`
+          : 'Some items are no longer available and were removed from your cart.',
+        'info'
+      );
       return kept;
     });
   }, [menuItems.length, menuById, notify]);
@@ -387,7 +398,7 @@ function App() {
 
     for (const orderItem of order.items) {
       const item = menuById.get(orderItem.menu_item_id);
-      if (!item) {
+      if (!item || item.stock_paused) {
         skipped += 1;
         continue;
       }

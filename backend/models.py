@@ -4,6 +4,7 @@ from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import IntegrityError
 
 db = SQLAlchemy()
 
@@ -160,6 +161,25 @@ def offered_sizes_for(menu_item) -> list:
     return normalize_offered_sizes(raw)
 
 
+def is_low_stock(ingredient) -> bool:
+    if not ingredient:
+        return False
+    return float(ingredient.stock_level or 0) <= float(ingredient.reorder_point or 0)
+
+
+def ensure_notification_schema():
+    """Create the email notification tables and the low-stock alert marker on existing databases."""
+    insp = inspect(db.engine)
+    for model in (NotificationRecipient, StoreSettings, EmailLog):
+        model.__table__.create(db.engine, checkfirst=True)
+    if insp.has_table('ingredients'):
+        columns = {col['name'] for col in insp.get_columns('ingredients')}
+        if 'low_stock_alerted_at' not in columns:
+            with db.engine.begin() as conn:
+                conn.execute(text('ALTER TABLE ingredients ADD COLUMN low_stock_alerted_at TIMESTAMP'))
+            print('Added ingredients.low_stock_alerted_at column')
+
+
 def ensure_order_guest_columns():
     """Remember who ordered and which table, so a QR scan is visible on the kitchen ticket."""
     insp = inspect(db.engine)
@@ -236,6 +256,8 @@ class Ingredient(db.Model):
     reorder_point = db.Column(db.Float, nullable=False, default=5.0)
     cost_per_unit = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
     lifespan_days = db.Column(db.Integer, nullable=True)
+    # Set when a low-stock email goes out; cleared once stock climbs back above the reorder point.
+    low_stock_alerted_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -252,6 +274,7 @@ class Ingredient(db.Model):
             'reorder_point': self.reorder_point,
             'cost_per_unit': float(self.cost_per_unit),
             'lifespan_days': self.lifespan_days,
+            'is_low_stock': is_low_stock(self),
             'created_at': self.created_at.isoformat()
         }
 
@@ -282,8 +305,15 @@ class MenuItem(db.Model):
             return float(self.price_large)
         return float(self.price)
 
-    def to_dict(self):
+    def low_stock_ingredients(self):
+        """Names of recipe ingredients at or under their reorder point."""
+        return [r.ingredient.name for r in self.ingredients if is_low_stock(r.ingredient)]
+
+    def to_dict(self, auto_pause=None):
         offered = offered_sizes_for(self)
+        if auto_pause is None:
+            auto_pause = StoreSettings.current().auto_pause_products
+        paused_by = self.low_stock_ingredients() if auto_pause else []
         return {
             'id': self.id,
             'name': self.name,
@@ -297,6 +327,9 @@ class MenuItem(db.Model):
             'created_at': self.created_at.isoformat(),
             'offered_sizes': offered,
             'supports_sizes': bool(offered),
+            # is_available is the admin's manual switch; stock_paused is automatic and lifts on restock.
+            'stock_paused': bool(paused_by),
+            'paused_ingredients': paused_by,
             'ingredients': [
                 {
                     'ingredient_id': mi.ingredient_id,
@@ -481,4 +514,88 @@ class Subscriber(db.Model):
             'id': self.id,
             'email': self.email,
             'created_at': self.created_at.isoformat()
+        }
+
+
+class NotificationRecipient(db.Model):
+    """Someone the system emails. Each recipient picks which emails they want."""
+    __tablename__ = 'notification_recipients'
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(254), unique=True, nullable=False)
+    name = db.Column(db.String(100), nullable=True)
+    receives_low_stock = db.Column(db.Boolean, nullable=False, default=True)
+    receives_daily_report = db.Column(db.Boolean, nullable=False, default=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'email': self.email,
+            'name': self.name,
+            'receives_low_stock': self.receives_low_stock,
+            'receives_daily_report': self.receives_daily_report,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat(),
+        }
+
+
+class StoreSettings(db.Model):
+    """Single-row table (id=1) for the store-wide notification switches and closing time.
+
+    SMTP credentials are deliberately NOT stored here; they only ever come from the environment.
+    """
+    __tablename__ = 'store_settings'
+    id = db.Column(db.Integer, primary_key=True)
+    low_stock_alerts_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    auto_pause_products = db.Column(db.Boolean, nullable=False, default=True)
+    daily_report_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    closing_time = db.Column(db.String(5), nullable=False, default='22:00')  # HH:MM, store-local
+    timezone = db.Column(db.String(64), nullable=False, default='Asia/Manila')
+    # Store-local "YYYY-MM-DDTHH:MM" of the last closing a report was sent (or skipped) for.
+    last_report_key = db.Column(db.String(20), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @classmethod
+    def current(cls):
+        row = db.session.get(cls, 1)
+        if row is None:
+            import os
+            row = cls(
+                id=1,
+                closing_time=os.getenv('STORE_CLOSING_TIME', '22:00'),
+                timezone=os.getenv('STORE_TIMEZONE', 'Asia/Manila'),
+            )
+            db.session.add(row)
+            try:
+                db.session.commit()
+            except IntegrityError:
+                # Two first requests raced to create it; use the winner's row.
+                db.session.rollback()
+                row = db.session.get(cls, 1)
+        return row
+
+
+class EmailLog(db.Model):
+    """Outcome of every email the system tried to send, shown in the admin portal."""
+    __tablename__ = 'email_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    kind = db.Column(db.String(30), nullable=False)  # low_stock, daily_report, test
+    subject = db.Column(db.String(200), nullable=False)
+    recipients = db.Column(db.Text, nullable=False, default='')  # comma separated
+    status = db.Column(db.String(20), nullable=False, default='queued')  # queued, sent, failed, skipped
+    error = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    sent_at = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'kind': self.kind,
+            'subject': self.subject,
+            'recipients': [r for r in (self.recipients or '').split(',') if r],
+            'status': self.status,
+            'error': self.error,
+            'created_at': self.created_at.isoformat(),
+            'sent_at': self.sent_at.isoformat() if self.sent_at else None,
         }

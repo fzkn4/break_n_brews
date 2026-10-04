@@ -1193,3 +1193,87 @@ select option {
 
 
 
+
+/* Email notifications: toggle switch, choice pills, spinner */
+.notif-switch {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border-hover);
+  background: var(--input-bg);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.notif-switch__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s ease;
+}
+
+.notif-switch.is-on {
+  background: var(--accent-gold);
+  border-color: var(--accent-gold);
+}
+
+.notif-switch.is-on .notif-switch__knob {
+  transform: translateX(18px);
+  background: #fff;
+}
+
+.notif-switch:focus-visible,
+.notif-pill:focus-visible {
+  outline: 2px solid var(--accent-gold);
+  outline-offset: 2px;
+}
+
+.notif-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.notif-pill {
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-hover);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.notif-pill:hover {
+  border-color: var(--accent-gold);
+}
+
+.notif-pill.is-on {
+  background: var(--accent-gold-glow);
+  border-color: var(--accent-gold);
+  color: var(--accent-gold);
+}
+
+.notif-spin {
+  animation: notifSpin 0.9s linear infinite;
+}
+
+@keyframes notifSpin {
+  to { transform: rotate(360deg); }
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}

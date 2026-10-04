@@ -10,6 +10,7 @@ import { RecordStockIn } from './components/RecordStockIn';
 import { Reports } from './components/Reports';
 import { ManageReviews } from './components/ManageReviews';
 import { TableQrCodes } from './components/TableQrCodes';
+import { EmailNotifications } from './components/EmailNotifications';
 import { Login } from './components/Login';
 import type { Ingredient, MenuItem, IngredientRequest, StockInLog, AnalyticsData, ReportData, Review, Subscriber, Order } from './types';
 import { hydrateAndMergeMenuItems, saveCustomMenuItem, removeCustomMenuItem, getCustomMenuItems, getDeletedMenuItemIds } from './lib/menuStorage';
@@ -551,6 +552,8 @@ function App() {
             onDeleteReview={handleDeleteReview}
           />
         )}
+
+        {activeTab === 'notifications' && <EmailNotifications showToast={showToast} />}
 
         {activeTab === 'reports' && (
           <Reports 
