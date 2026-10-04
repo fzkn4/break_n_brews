@@ -1,10 +1,19 @@
+import json
 import os
-from flask import Flask, request, jsonify
+import socket
+import uuid
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from decimal import Decimal
 from datetime import datetime, timedelta
 from config import Config
-from models import db, Staff, Ingredient, MenuItem, MenuItemIngredient, IngredientRequest, StockInLog, Order, OrderItem, Transaction, Review, Subscriber
+from models import (
+    db, Staff, Ingredient, MenuItem, MenuItemIngredient, IngredientRequest, StockInLog, Order, OrderItem,
+    Transaction, Review, Subscriber, ensure_ingredient_lifespan_column, ensure_recipe_size_columns,
+    ensure_order_guest_columns,
+    default_lifespan_days, is_sizeable_category, is_auto_customizable, recipe_qty_for_size, LEVEL_MULTIPLIERS,
+    SIZE_LEVELS, normalize_offered_sizes, offered_sizes_for, order_size_for,
+)
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -21,6 +30,18 @@ def add_cors_headers(response):
 
 # Initialize database
 db.init_app(app)
+
+_schema_ready = False
+
+@app.before_request
+def _ensure_schema():
+    global _schema_ready
+    if _schema_ready:
+        return
+    ensure_ingredient_lifespan_column()
+    ensure_recipe_size_columns()
+    ensure_order_guest_columns()
+    _schema_ready = True
 
 # Helper function to convert Decimals to floats recursively for JSON response
 def clean_decimal(obj):
@@ -51,7 +72,8 @@ def manage_ingredients():
             stock_level=float(data.get('stock_level', 0.0)),
             unit=data['unit'],
             reorder_point=float(data.get('reorder_point', 5.0)),
-            cost_per_unit=Decimal(str(data.get('cost_per_unit', 0.00)))
+            cost_per_unit=Decimal(str(data.get('cost_per_unit', 0.00))),
+            lifespan_days=int(data['lifespan_days']) if data.get('lifespan_days') not in (None, '') else default_lifespan_days(data['category'])
         )
         db.session.add(ing)
         db.session.commit()
@@ -86,11 +108,66 @@ def update_ingredient(id):
         ing.reorder_point = float(data['reorder_point'])
     if 'cost_per_unit' in data:
         ing.cost_per_unit = Decimal(str(data['cost_per_unit']))
+    if 'lifespan_days' in data:
+        ing.lifespan_days = int(data['lifespan_days']) if data['lifespan_days'] not in (None, '') else None
         
     db.session.commit()
     return jsonify(clean_decimal(ing.to_dict()))
 
 # ----------------- MENU ENDPOINTS -----------------
+
+def _offered_from_payload(data, category):
+    """Per-product sizes. Missing key keeps the old category default."""
+    if 'offered_sizes' not in data:
+        return list(SIZE_LEVELS) if is_sizeable_category(category) else []
+    return normalize_offered_sizes(data.get('offered_sizes'))
+
+
+def _menu_recipe_fields(ing_item, offered_sizes):
+    """Build MenuItemIngredient column values from API payload."""
+    ingredient = Ingredient.query.get(ing_item['ingredient_id'])
+    default_qty = float(ing_item.get('default_quantity', 0))
+    offers = set(offered_sizes or [])
+
+    if offers:
+        qty_medium = (
+            float(ing_item['qty_medium'])
+            if ing_item.get('qty_medium') is not None
+            else default_qty
+        )
+        qty_small = (
+            float(ing_item['qty_small'])
+            if ing_item.get('qty_small') is not None
+            else qty_medium * 0.75
+        )
+        qty_large = (
+            float(ing_item['qty_large'])
+            if ing_item.get('qty_large') is not None
+            else qty_medium * 1.25
+        )
+        if 'Medium' in offers:
+            default_quantity = qty_medium
+        elif 'Small' in offers:
+            default_quantity = qty_small
+        else:
+            default_quantity = qty_large
+    else:
+        qty_small = qty_medium = qty_large = None
+        default_quantity = default_qty
+
+    if 'is_customizable' in ing_item:
+        is_customizable = bool(ing_item['is_customizable'])
+    else:
+        is_customizable = is_auto_customizable(ingredient)
+
+    return {
+        'default_quantity': default_quantity,
+        'qty_small': qty_small,
+        'qty_medium': qty_medium,
+        'qty_large': qty_large,
+        'is_customizable': is_customizable,
+    }
+
 
 @app.route('/api/menu', methods=['GET', 'POST'])
 def manage_menu():
@@ -103,23 +180,28 @@ def manage_menu():
         if MenuItem.query.filter_by(name=data['name']).first():
             return jsonify({'error': 'Menu item name already exists'}), 400
 
+        offered = _offered_from_payload(data, data['category'])
         item = MenuItem(
             name=data['name'],
             category=data['category'],
             price=Decimal(str(data['price'])),
+            price_small=Decimal(str(data['price_small'])) if data.get('price_small') is not None else None,
+            price_medium=Decimal(str(data['price_medium'])) if data.get('price_medium') is not None else None,
+            price_large=Decimal(str(data['price_large'])) if data.get('price_large') is not None else None,
             is_available=data.get('is_available', True),
-            image_url=data.get('image_url')
+            image_url=data.get('image_url'),
+            offered_sizes=json.dumps(offered),
         )
         db.session.add(item)
         db.session.flush() # Populate ID
 
         ingredients_data = data.get('ingredients', [])
         for ing_item in ingredients_data:
+            fields = _menu_recipe_fields(ing_item, offered)
             menu_ing = MenuItemIngredient(
                 menu_item_id=item.id,
                 ingredient_id=ing_item['ingredient_id'],
-                default_quantity=float(ing_item['default_quantity']),
-                is_customizable=bool(ing_item.get('is_customizable', False))
+                **fields,
             )
             db.session.add(menu_ing)
         db.session.commit()
@@ -148,27 +230,72 @@ def update_menu_item(id):
         item.category = data['category']
     if 'price' in data:
         item.price = Decimal(str(data['price']))
+    if 'price_small' in data:
+        item.price_small = Decimal(str(data['price_small'])) if data['price_small'] is not None else None
+    if 'price_medium' in data:
+        item.price_medium = Decimal(str(data['price_medium'])) if data['price_medium'] is not None else None
+    if 'price_large' in data:
+        item.price_large = Decimal(str(data['price_large'])) if data['price_large'] is not None else None
     if 'is_available' in data:
         item.is_available = data['is_available']
     if 'image_url' in data:
         item.image_url = data['image_url']
-        
+
+    if 'offered_sizes' in data:
+        offered = normalize_offered_sizes(data.get('offered_sizes'))
+        item.offered_sizes = json.dumps(offered)
+    else:
+        offered = offered_sizes_for(item)
+
     if 'ingredients' in data:
         # Clear existing
         MenuItemIngredient.query.filter_by(menu_item_id=item.id).delete()
         
         ingredients_data = data['ingredients']
         for ing_item in ingredients_data:
+            fields = _menu_recipe_fields(ing_item, offered)
             menu_ing = MenuItemIngredient(
                 menu_item_id=item.id,
                 ingredient_id=ing_item['ingredient_id'],
-                default_quantity=float(ing_item['default_quantity']),
-                is_customizable=bool(ing_item.get('is_customizable', False))
+                **fields,
             )
             db.session.add(menu_ing)
 
     db.session.commit()
     return jsonify(clean_decimal(item.to_dict()))
+
+
+UPLOAD_DIR = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'uploads')
+ALLOWED_IMAGE_EXT = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+
+
+@app.route('/api/uploads', methods=['POST'])
+def upload_menu_image():
+    """Store a product photo and return a URL the portals can use as image_url."""
+    upload = request.files.get('file')
+    if not upload or not upload.filename:
+        return jsonify({'error': 'Choose an image file to attach'}), 400
+
+    ext = os.path.splitext(upload.filename)[1].lower()
+    if ext not in ALLOWED_IMAGE_EXT:
+        return jsonify({'error': 'Attach a JPG, PNG, WEBP, or GIF image'}), 400
+
+    upload.seek(0, os.SEEK_END)
+    size = upload.tell()
+    upload.seek(0)
+    if size > 5 * 1024 * 1024:
+        return jsonify({'error': 'Image must be 5 MB or smaller'}), 400
+
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    filename = f'{uuid.uuid4().hex}{ext}'
+    upload.save(os.path.join(UPLOAD_DIR, filename))
+    image_url = request.host_url.rstrip('/') + f'/api/uploads/{filename}'
+    return jsonify({'image_url': image_url}), 201
+
+
+@app.route('/api/uploads/<path:filename>', methods=['GET'])
+def serve_menu_image(filename):
+    return send_from_directory(UPLOAD_DIR, filename)
 
 # ----------------- INGREDIENT REQUESTS (MANAGE REQUEST) -----------------
 
@@ -283,17 +410,20 @@ def manage_stockin():
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.json or {}
-    email = data.get('email')
+    identifier = (data.get('username') or data.get('email') or '').strip()
     password = data.get('password')
 
-    if not email or not password:
-        return jsonify({'error': 'Missing email or password'}), 400
+    if not identifier or not password:
+        return jsonify({'error': 'Missing username/email or password'}), 400
 
-    # Find staff by email (case-insensitive)
-    staff = Staff.query.filter(db.func.lower(Staff.email) == email.lower().strip()).first()
+    # Find staff by email or name (case-insensitive)
+    staff = Staff.query.filter(
+        (db.func.lower(Staff.email) == identifier.lower()) |
+        (db.func.lower(Staff.name) == identifier.lower())
+    ).first()
 
     if not staff or not staff.check_password(password):
-        return jsonify({'error': 'Invalid email or password'}), 401
+        return jsonify({'error': 'Invalid username or password'}), 401
 
     if not staff.is_active:
         return jsonify({'error': 'This account is currently deactivated. Please contact your manager.'}), 403
@@ -354,17 +484,17 @@ def place_order():
         
         customs = item.get('customizations', [])
         customs_dict = {c['ingredient_id']: c.get('level', 'Regular') for c in customs if 'ingredient_id' in c}
+        size = order_size_for(menu_item, item.get('size'))
 
         for recipe_item in menu_item.ingredients:
             ing_id = recipe_item.ingredient_id
-            default_qty = recipe_item.default_quantity
             is_cust = recipe_item.is_customizable
-            
+
             level = customs_dict.get(ing_id, 'Regular') if is_cust else 'Regular'
-            multipliers = {"None": 0.0, "Less": 0.5, "Regular": 1.0, "Extra": 1.5}
-            multiplier = multipliers.get(level, 1.0)
-            
-            needed = qty * (default_qty * multiplier)
+            multiplier = LEVEL_MULTIPLIERS.get(level, 1.0)
+
+            base_qty = recipe_qty_for_size(recipe_item, size)
+            needed = qty * (base_qty * multiplier)
             required_ingredients[ing_id] = required_ingredients.get(ing_id, 0.0) + needed
 
     # If it is a customer order (pending status), check if we have enough ingredients
@@ -382,7 +512,8 @@ def place_order():
         if not menu_item or not menu_item.is_available:
             return jsonify({'error': f'Item ID {menu_item_id} is unavailable'}), 400
         
-        price_snapshot = menu_item.price
+        size = order_size_for(menu_item, item.get('size'))
+        price_snapshot = Decimal(str(menu_item.price_for_size(size)))
         total_amount += price_snapshot * qty
         
         customs = item.get('customizations', [])
@@ -394,35 +525,41 @@ def place_order():
 
         for recipe_item in menu_item.ingredients:
             ing_id = recipe_item.ingredient_id
-            default_qty = recipe_item.default_quantity
             is_cust = recipe_item.is_customizable
-            
+
             level = customs_dict.get(ing_id, 'Regular') if is_cust else 'Regular'
-            multipliers = {"None": 0.0, "Less": 0.5, "Regular": 1.0, "Extra": 1.5}
-            multiplier = multipliers.get(level, 1.0)
-            
-            needed = qty * (default_qty * multiplier)
+            multiplier = LEVEL_MULTIPLIERS.get(level, 1.0)
+
+            base_qty = recipe_qty_for_size(recipe_item, size)
+            needed = qty * (base_qty * multiplier)
             ing = Ingredient.query.get(ing_id)
             if ing:
                 ing.stock_level = max(0.0, float(ing.stock_level) - needed)
-            
+
             if is_cust:
                 valid_customs.append({
                     "ingredient_id": ing_id,
                     "name": recipe_item.ingredient.name,
-                    "level": level
+                    "level": level,
+                    "size": size,
                 })
 
         order_items.append(OrderItem(
             menu_item_id=menu_item_id,
             quantity=qty,
             price_at_order=price_snapshot,
-            customizations=json.dumps(valid_customs)
+            customizations=json.dumps(valid_customs),
+            size=size,
         ))
 
+    dining = data.get('dining') if data.get('dining') in ('dine_in', 'takeaway') else None
     new_order = Order(
         status=data.get('status', 'completed'),
         total_amount=total_amount,
+        customer_name=(data.get('customer_name') or '').strip()[:100] or None,
+        table_label=(data.get('table_label') or '').strip()[:20] or None,
+        dining=dining,
+        channel='qr' if data.get('channel') == 'qr' else 'counter',
         items=order_items
     )
     db.session.add(new_order)
@@ -437,6 +574,28 @@ def place_order():
     db.session.commit()
 
     return jsonify(clean_decimal(new_order.to_dict())), 201
+
+def _lan_ip() -> str:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(('8.8.8.8', 80))
+        return sock.getsockname()[0]
+    except OSError:
+        return '127.0.0.1'
+    finally:
+        sock.close()
+
+
+@app.route('/api/lan', methods=['GET'])
+def lan_address():
+    """Address phones on the same Wi-Fi should use when they scan a table QR."""
+    ip = _lan_ip()
+    return jsonify({
+        'ip': ip,
+        'customer_url': f'http://{ip}:5176',
+        'api_url': f'http://{ip}:5001/api',
+    })
+
 
 @app.route('/api/orders', methods=['GET'])
 def get_orders():
@@ -694,19 +853,102 @@ def get_reports():
     # Sort by revenue descending
     sales_breakdown.sort(key=lambda x: x['revenue'], reverse=True)
 
+    # 4. Stock grouped by ingredient category
+    stock_by_category_map = {}
+    for row in inventory_health:
+        cat = row['category']
+        if cat not in stock_by_category_map:
+            stock_by_category_map[cat] = {
+                'category': cat,
+                'item_count': 0,
+                'total_stock_value': 0.0,
+                'low_stock_count': 0,
+                'items': [],
+            }
+        bucket = stock_by_category_map[cat]
+        bucket['item_count'] += 1
+        bucket['total_stock_value'] += row['cost_value']
+        if row['status'] != 'Normal':
+            bucket['low_stock_count'] += 1
+        bucket['items'].append(row)
+    stock_by_category = list(stock_by_category_map.values())
+    for bucket in stock_by_category:
+        bucket['total_stock_value'] = round(bucket['total_stock_value'], 2)
+
+    # 5. Per-order stock deductions (current recipes; non-cancelled orders only)
+    import json as json_mod
+    stock_per_order = []
+    orders = Order.query.filter(Order.status != 'cancelled').order_by(Order.created_at.desc()).all()
+    for order in orders:
+        deductions = []
+        for oi in order.items:
+            if not oi.menu_item:
+                continue
+            size = order_size_for(oi.menu_item, oi.size)
+            customs_dict = {}
+            if oi.customizations:
+                try:
+                    parsed = json_mod.loads(oi.customizations)
+                    for c in parsed:
+                        if 'ingredient_id' in c:
+                            customs_dict[c['ingredient_id']] = c.get('level', 'Regular')
+                except Exception:
+                    pass
+            menu_name = oi.menu_item.name
+            for recipe_item in oi.menu_item.ingredients:
+                ing = recipe_item.ingredient
+                if not ing:
+                    continue
+                is_cust = recipe_item.is_customizable
+                level = customs_dict.get(recipe_item.ingredient_id, 'Regular') if is_cust else 'Regular'
+                multiplier = LEVEL_MULTIPLIERS.get(level, 1.0)
+                base_qty = recipe_qty_for_size(recipe_item, size)
+                amount = oi.quantity * base_qty * multiplier
+                if amount <= 0:
+                    continue
+                deductions.append({
+                    'ingredient_name': ing.name,
+                    'unit': ing.unit,
+                    'amount': round(amount, 6),
+                    'menu_item': menu_name,
+                    'size': size,
+                    'level': level,
+                })
+        stock_per_order.append({
+            'order_id': order.id,
+            'created_at': order.created_at.isoformat(),
+            'status': order.status,
+            'total_amount': float(order.total_amount),
+            'deductions': deductions,
+        })
+
     return jsonify(clean_decimal({
         'inventory_health': inventory_health,
         'supplier_summary': supplier_summary,
-        'sales_breakdown': sales_breakdown
+        'sales_breakdown': sales_breakdown,
+        'stock_by_category': stock_by_category,
+        'stock_per_order': stock_per_order,
     }))
 
 # ----------------- DB SETUP & RUN -----------------
 
 if __name__ == '__main__':
     with app.app_context():
-        # Setup tables & seed automatically
-        from seed import seed_database
-        seed_database()
-        
+        from sqlalchemy import inspect
+        force_seed = os.getenv('SEED_ON_START', '').lower() in ('1', 'true', 'yes')
+        already_seeded = inspect(db.engine).has_table('staff')
+        if force_seed or not already_seeded:
+            reason = 'SEED_ON_START is set' if force_seed else 'no existing schema found'
+            print(f'Seeding database ({reason})...')
+            from seed import seed_database
+            seed_database()
+        else:
+            db.create_all()
+            ensure_ingredient_lifespan_column()
+            ensure_recipe_size_columns()
+            ensure_order_guest_columns()
+            print('Existing database detected — preserving schema and data.')
+
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
+

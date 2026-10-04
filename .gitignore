@@ -14,6 +14,8 @@ __pycache__/
 .env.test.local
 .env.production.local
 backend/.env
+backend/uploads/*
+!backend/uploads/.gitkeep
 
 # OS Files
 .DS_Store

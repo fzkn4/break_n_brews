@@ -10,7 +10,7 @@ const COLUMNS: { heading: string; links: { label: string; view?: View }[] }[] = 
     links: [
       { label: 'Full menu', view: 'menu' },
       { label: 'Track an order', view: 'tracker' },
-      { label: 'Dine in or takeaway', view: 'menu' }
+      { label: 'Dine in or takeout', view: 'menu' }
     ]
   },
   {

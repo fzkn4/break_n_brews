@@ -2,19 +2,56 @@ import React, { useState } from 'react';
 import { 
   Package, 
   AlertTriangle, 
-  Clock, 
   TrendingUp, 
-  ClipboardList,
+  TrendingDown,
   X,
   Send
 } from 'lucide-react';
 import type { AnalyticsData, Ingredient } from '../types';
 
+type PredictionStatus = 'critical' | 'warning' | 'low' | 'normal';
+
+function getPredictionDetails(item: Ingredient) {
+  const ratio = item.reorder_point > 0 ? item.stock_level / item.reorder_point : 1;
+  let status: PredictionStatus = 'normal';
+  let estDaysLeft = 15;
+  let suggestedAction = 'Maintain';
+
+  if (item.stock_level === 0) {
+    status = 'critical';
+    estDaysLeft = 0;
+    suggestedAction = 'Contact Supplier';
+  } else if (ratio <= 0.4) {
+    status = 'critical';
+    estDaysLeft = Math.max(1, Math.ceil(ratio * 10));
+    suggestedAction = 'Contact Supplier';
+  } else if (ratio <= 0.7) {
+    status = 'warning';
+    estDaysLeft = Math.max(2, Math.ceil(ratio * 10));
+    suggestedAction = 'Monitor';
+  } else if (ratio <= 1.0) {
+    status = 'low';
+    estDaysLeft = Math.max(5, Math.ceil(ratio * 12));
+    suggestedAction = 'Monitor';
+  } else {
+    status = 'normal';
+    estDaysLeft = Math.ceil(ratio * 15);
+    suggestedAction = 'Maintain';
+  }
+
+  return { status, estDaysLeft, suggestedAction };
+}
+
+const STATUS_COLOR: Record<PredictionStatus, string> = {
+  critical: '#ef4444',
+  warning: '#f59e0b',
+  low: '#eab308',
+  normal: '#10b981'
+};
+
 interface DashboardProps {
   analyticsData: AnalyticsData | null;
   loading: boolean;
-  onApproveRequest?: (id: number) => void;
-  onRejectRequest?: (id: number) => void;
   analyticsDays: number;
   setAnalyticsDays: (days: number) => void;
   ingredients: Ingredient[];
@@ -24,8 +61,6 @@ interface DashboardProps {
 export const Dashboard: React.FC<DashboardProps> = ({ 
   analyticsData, 
   loading,
-  onApproveRequest,
-  onRejectRequest,
   analyticsDays,
   setAnalyticsDays,
   ingredients,
@@ -69,12 +104,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return (
       <div style={styles.loadingContainer}>
         <div style={styles.spinner}></div>
-        <span style={{ marginTop: '12px', color: '#9ca3af' }}>Gathering coffee shop statistics...</span>
+        <span style={{ marginTop: '12px', color: 'var(--text-muted)' }}>Gathering coffee shop statistics...</span>
       </div>
     );
   }
 
-  const { kpi, revenue_trend, category_distribution, recent_requests, low_stock_items } = analyticsData;
+  const { kpi, revenue_trend, category_distribution, low_stock_items } = analyticsData;
+
+  const predictionItems = [...ingredients]
+    .sort((a, b) => {
+      const ratioA = a.reorder_point > 0 ? a.stock_level / a.reorder_point : 1;
+      const ratioB = b.reorder_point > 0 ? b.stock_level / b.reorder_point : 1;
+      return ratioA - ratioB;
+    })
+    .slice(0, 5);
+
+  const predictionRows = predictionItems.map((item) => ({
+    item,
+    ...getPredictionDetails(item)
+  }));
+  const maxDaysLeft = Math.max(...predictionRows.map((row) => row.estDaysLeft), 7);
 
   // Helpers for SVG Line Chart (Revenue Trend)
   const maxRevenue = Math.max(...revenue_trend.map(d => d.revenue), 100);
@@ -106,12 +155,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const barGap = barCount > 1 ? Math.floor((availableWidth - barWidth * barCount) / (barCount - 1)) : 45;
 
   return (
-    <div style={styles.container} className="fade-in">
-      {/* 4 KPI Hero Stats Cards */}
+    <div style={styles.container} className="page-scroll fade-in">
+      {/* 3 KPI Hero Stats Cards */}
       <div style={styles.statsGrid}>
         {/* KPI 1: Total Ingredients */}
-        <div style={styles.card} className="glass-card">
-          <div style={styles.statIconContainer}>
+        <div style={styles.card} className="glass-card group relative transition-all duration-300 ease-out cursor-pointer hover:scale-105 hover:-translate-y-1 hover:shadow-xl hover:shadow-amber-950/10">
+          <div style={styles.statIconContainer} className="group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300">
             <Package size={22} color="#f59e0b" />
           </div>
           <div style={styles.statDetails}>
@@ -126,12 +175,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* KPI 2: Low Stock Alerts */}
         <div style={{
           ...styles.card,
-          border: kpi.low_stock_count > 0 ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(255, 255, 255, 0.05)'
-        }} className="glass-card">
+          border: kpi.low_stock_count > 0 ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid var(--table-border)'
+        }} className="glass-card group relative transition-all duration-300 ease-out cursor-pointer hover:scale-105 hover:-translate-y-1 hover:shadow-xl hover:shadow-amber-950/10">
           <div style={{
             ...styles.statIconContainer,
-            backgroundColor: kpi.low_stock_count > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255, 255, 255, 0.02)'
-          }}>
+            backgroundColor: kpi.low_stock_count > 0 ? 'rgba(239, 68, 68, 0.1)' : 'var(--surface-muted)'
+          }} className="group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300">
             <AlertTriangle size={22} color={kpi.low_stock_count > 0 ? '#ef4444' : '#10b981'} />
           </div>
           <div style={styles.statDetails}>
@@ -148,30 +197,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
 
-        {/* KPI 3: Pending Requests */}
-        <div style={styles.card} className="glass-card">
-          <div style={styles.statIconContainer}>
-            <Clock size={22} color="#3b82f6" />
-          </div>
-          <div style={styles.statDetails}>
-            <span style={styles.statLabel}>Pending Requests</span>
-            <span style={styles.statValue}>{kpi.pending_requests} Pending</span>
-            <div style={styles.statTrend}>
-              <span style={kpi.pending_requests > 0 ? styles.trendTextYellow : styles.trendTextGreen}>
-                {kpi.pending_requests > 0 ? 'Awaiting supervisor approval' : 'All requests resolved'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* KPI 4: Monthly Stock In Value */}
-        <div style={styles.card} className="glass-card">
-          <div style={styles.statIconContainer}>
+        {/* KPI 3: Monthly Stock In Value */}
+        <div style={styles.card} className="glass-card group relative transition-all duration-300 ease-out cursor-pointer hover:scale-105 hover:-translate-y-1 hover:shadow-xl hover:shadow-amber-950/10">
+          <div style={styles.statIconContainer} className="group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300">
             <TrendingUp size={22} color="#10b981" />
           </div>
           <div style={styles.statDetails}>
             <span style={styles.statLabel}>Stock-In (30d)</span>
-            <span style={styles.statValue}>${kpi.total_stock_in_value.toFixed(2)}</span>
+            <span style={styles.statValue}>₱{kpi.total_stock_in_value.toFixed(2)}</span>
             <div style={styles.statTrend}>
               <span style={styles.trendTextMuted}>Total shipment costs</span>
             </div>
@@ -194,9 +227,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     padding: '4px 10px',
                     fontSize: '0.75rem',
                     borderRadius: '6px',
-                    border: analyticsDays === days ? '1px solid #f59e0b' : '1px solid rgba(255,255,255,0.08)',
-                    backgroundColor: analyticsDays === days ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.02)',
-                    color: analyticsDays === days ? '#f59e0b' : '#9ca3af',
+                    border: analyticsDays === days ? '1px solid #f59e0b' : '1px solid var(--border-glass)',
+                    backgroundColor: analyticsDays === days ? 'rgba(245,158,11,0.12)' : 'var(--surface-muted)',
+                    color: analyticsDays === days ? '#f59e0b' : 'var(--text-muted)',
                     cursor: 'pointer',
                     fontWeight: analyticsDays === days ? '600' : '400',
                     transition: 'all 0.2s'
@@ -216,9 +249,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
-              <line x1={paddingX} y1={paddingY} x2={chartWidth - paddingX} y2={paddingY} stroke="rgba(255,255,255,0.05)" />
-              <line x1={paddingX} y1={chartHeight / 2} x2={chartWidth - paddingX} y2={chartHeight / 2} stroke="rgba(255,255,255,0.05)" />
-              <line x1={paddingX} y1={chartHeight - paddingY} x2={chartWidth - paddingX} y2={chartHeight - paddingY} stroke="rgba(255,255,255,0.05)" />
+              <line x1={paddingX} y1={paddingY} x2={chartWidth - paddingX} y2={paddingY} stroke="var(--chart-grid)" />
+              <line x1={paddingX} y1={chartHeight / 2} x2={chartWidth - paddingX} y2={chartHeight / 2} stroke="var(--chart-grid)" />
+              <line x1={paddingX} y1={chartHeight - paddingY} x2={chartWidth - paddingX} y2={chartHeight - paddingY} stroke="var(--chart-grid)" />
               
               {areaPath && <path d={areaPath} fill="url(#revGrad)" />}
               {linePath && <path d={linePath} fill="none" stroke="#f59e0b" strokeWidth="2.5" />}
@@ -241,9 +274,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 const showDate = revenue_trend.length <= 7 || i % Math.ceil(revenue_trend.length / 7) === 0;
                 return (
                   <g key={i}>
-                    <circle cx={p.x} cy={p.y} r="3.5" fill="#0b0b0e" stroke="#f59e0b" strokeWidth="2" />
+                    <circle cx={p.x} cy={p.y} r="3.5" fill="var(--chart-dot-fill)" stroke="#f59e0b" strokeWidth="2" />
                     {showDate && (
-                      <text x={p.x} y={chartHeight - 4} fill="#9ca3af" fontSize="9" textAnchor="middle">{p.date}</text>
+                      <text x={p.x} y={chartHeight - 4} fill="var(--text-muted)" fontSize="9" textAnchor="middle">{p.date}</text>
                     )}
                   </g>
                 );
@@ -287,21 +320,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 left: `${(hoveredPoint.x / chartWidth) * 100}%`,
                 top: `${(hoveredPoint.y / chartHeight) * 100 - 15}%`,
                 transform: 'translate(-50%, -100%)',
-                backgroundColor: 'rgba(15, 10, 5, 0.95)',
+                backgroundColor: 'var(--tooltip-bg)',
                 border: '1px solid #f59e0b',
                 borderRadius: '8px',
                 padding: '6px 10px',
                 color: 'var(--text-primary)',
                 fontSize: '0.75rem',
                 pointerEvents: 'none',
-                boxShadow: '0 4px 15px rgba(0,0,0,0.6)',
+                boxShadow: 'var(--card-shadow)',
                 zIndex: 100,
                 minWidth: '90px',
                 textAlign: 'center',
                 backdropFilter: 'blur(8px)'
               }}>
-                <div style={{ color: '#9ca3af', fontSize: '0.65rem', marginBottom: '2px' }}>{hoveredPoint.date}</div>
-                <div style={{ fontWeight: '700', color: '#f59e0b' }}>${hoveredPoint.val.toFixed(2)}</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem', marginBottom: '2px' }}>{hoveredPoint.date}</div>
+                <div style={{ fontWeight: '700', color: '#f59e0b' }}>₱{hoveredPoint.val.toFixed(2)}</div>
               </div>
             )}
           </div>
@@ -318,9 +351,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   padding: '4px 10px',
                   fontSize: '0.75rem',
                   borderRadius: '6px',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  backgroundColor: 'rgba(255,255,255,0.02)',
-                  color: '#9ca3af',
+                  border: '1px solid var(--border-glass)',
+                  backgroundColor: 'var(--surface-muted)',
+                  color: 'var(--text-muted)',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -346,8 +379,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.4" />
                 </linearGradient>
               </defs>
-              <line x1={paddingX} y1={paddingY} x2={barChartWidth - paddingX} y2={paddingY} stroke="rgba(255,255,255,0.05)" />
-              <line x1={paddingX} y1={barChartHeight - paddingY} x2={barChartWidth - paddingX} y2={barChartHeight - paddingY} stroke="rgba(255,255,255,0.05)" />
+              <line x1={paddingX} y1={paddingY} x2={barChartWidth - paddingX} y2={paddingY} stroke="var(--chart-grid)" />
+              <line x1={paddingX} y1={barChartHeight - paddingY} x2={barChartWidth - paddingX} y2={barChartHeight - paddingY} stroke="var(--chart-grid)" />
 
               {category_distribution.map((cat, index) => {
                 const x = paddingX + 15 + index * (barWidth + barGap);
@@ -372,7 +405,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       onMouseLeave={() => setHoveredBar(null)}
                       onClick={() => setSelectedCategory(isSelected ? null : cat.name)}
                     />
-                    <text x={x + barWidth / 2} y={barChartHeight - 4} fill="#9ca3af" fontSize="9" textAnchor="middle">
+                    <text x={x + barWidth / 2} y={barChartHeight - 4} fill="var(--text-muted)" fontSize="9" textAnchor="middle">
                       {cat.name.length > 8 ? `${cat.name.substring(0, 8)}.` : cat.name}
                     </text>
                   </g>
@@ -387,20 +420,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 left: `${(hoveredBar.x / barChartWidth) * 100}%`,
                 top: `${(hoveredBar.y / barChartHeight) * 100 - 15}%`,
                 transform: 'translate(-50%, -100%)',
-                backgroundColor: 'rgba(5, 10, 20, 0.95)',
+                backgroundColor: 'var(--tooltip-bg)',
                 border: '1px solid #3b82f6',
                 borderRadius: '8px',
                 padding: '6px 10px',
                 color: 'var(--text-primary)',
                 fontSize: '0.75rem',
                 pointerEvents: 'none',
-                boxShadow: '0 4px 15px rgba(0,0,0,0.6)',
+                boxShadow: 'var(--card-shadow)',
                 zIndex: 100,
                 minWidth: '100px',
                 textAlign: 'center',
                 backdropFilter: 'blur(8px)'
               }}>
-                <div style={{ color: '#9ca3af', fontSize: '0.65rem', marginBottom: '2px' }}>{hoveredBar.name}</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem', marginBottom: '2px' }}>{hoveredBar.name}</div>
                 <div style={{ fontWeight: '700', color: '#60a5fa' }}>{hoveredBar.value} Items</div>
               </div>
             )}
@@ -411,7 +444,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Interactive Category Focus Panel */}
       {selectedCategory && (
         <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', animation: 'fadeIn 0.25s ease' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--chart-grid)', paddingBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#3b82f6' }}></span>
               <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '700', color: 'var(--text-primary)' }}>
@@ -420,7 +453,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
             <button 
               onClick={() => setSelectedCategory(null)} 
-              style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9ca3af' }}
+              style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
             >
               <X size={18} />
             </button>
@@ -452,7 +485,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{ing.name}</td>
                           <td>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '150px' }}>
-                              <div style={{ flex: 1, height: '6px', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '3px', overflow: 'hidden' }}>
+                              <div style={{ flex: 1, height: '6px', backgroundColor: 'var(--surface-hover)', borderRadius: '3px', overflow: 'hidden' }}>
                                 <div style={{ height: '100%', width: `${percent}%`, backgroundColor: isLow ? '#ef4444' : '#10b981', borderRadius: '3px' }}></div>
                               </div>
                               <span style={{ fontSize: '0.75rem', fontWeight: '600', color: isLow ? '#ef4444' : '#10b981' }}>
@@ -463,8 +496,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           <td style={{ fontWeight: '700', color: isLow ? '#ef4444' : 'var(--text-primary)' }}>
                             {ing.stock_level} {ing.unit}
                           </td>
-                          <td style={{ color: '#9ca3af' }}>{ing.reorder_point} {ing.unit}</td>
-                          <td>${ing.cost_per_unit.toFixed(2)}</td>
+                          <td style={{ color: 'var(--text-muted)' }}>{ing.reorder_point} {ing.unit}</td>
+                          <td>₱{ing.cost_per_unit.toFixed(2)}</td>
                           <td style={{ textAlign: 'right' }}>
                             <button
                               onClick={() => {
@@ -480,9 +513,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                               style={{ 
                                 padding: '6px 12px', 
                                 fontSize: '0.8rem',
-                                backgroundColor: isRefillOpen ? 'rgba(255,255,255,0.05)' : 'rgba(59,130,246,0.1)',
-                                border: isRefillOpen ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(59,130,246,0.2)',
-                                color: isRefillOpen ? '#9ca3af' : '#60a5fa'
+                                backgroundColor: isRefillOpen ? 'var(--surface-hover)' : 'rgba(59,130,246,0.1)',
+                                border: isRefillOpen ? '1px solid var(--border-glass)' : '1px solid rgba(59,130,246,0.2)',
+                                color: isRefillOpen ? 'var(--text-muted)' : '#60a5fa'
                               }}
                             >
                               {isRefillOpen ? 'Cancel' : 'Request Refill'}
@@ -491,10 +524,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         </tr>
                         {isRefillOpen && (
                           <tr>
-                            <td colSpan={6} style={{ backgroundColor: 'rgba(255,255,255,0.01)', padding: '16px', borderTop: 'none' }}>
+                            <td colSpan={6} style={{ backgroundColor: 'var(--surface-muted)', padding: '16px', borderTop: 'none' }}>
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '200px' }}>
-                                  <label style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: '600' }}>Staff Name</label>
+                                  <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>Staff Name</label>
                                   <input
                                     type="text"
                                     className="glass-input"
@@ -505,7 +538,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                   />
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '120px' }}>
-                                  <label style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: '600' }}>Quantity ({ing.unit})</label>
+                                  <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>Quantity ({ing.unit})</label>
                                   <input
                                     type="number"
                                     step="any"
@@ -517,7 +550,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                   />
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: '200px' }}>
-                                  <label style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: '600' }}>Reason / Notes</label>
+                                  <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>Reason / Notes</label>
                                   <input
                                     type="text"
                                     className="glass-input"
@@ -550,58 +583,90 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Two Columns Grid for lists */}
       <div style={styles.listsGrid}>
-        {/* Left Column: Quick requests review */}
+        {/* Left Column: Inventory alert & prediction */}
         <div style={styles.listCard} className="glass-card">
           <div style={styles.listHeader}>
-            <h3 style={styles.listTitle}>Pending Requests Quick Actions</h3>
-            <ClipboardList size={18} color="#3b82f6" />
+            <div>
+              <h3 style={styles.listTitle}>Inventory Alert & Prediction</h3>
+              <p style={styles.listSubtitle}>Critical stock levels and estimated days remaining (Top 5)</p>
+            </div>
+            <TrendingDown size={18} color="#f59e0b" />
           </div>
 
-          <div style={styles.listContent}>
-            {recent_requests.length === 0 ? (
-              <div style={styles.emptyState}>
-                <span>No pending ingredient requests to review.</span>
-              </div>
-            ) : (
-              recent_requests.map((req) => (
-                <div key={req.id} style={styles.requestItem}>
-                  <div style={styles.requestDetails}>
-                    <div style={styles.requestHeading}>
-                      <span style={styles.requestIngName}>{req.ingredient_name}</span>
-                      <span style={styles.requestQty}>
-                        Request: {req.quantity} {req.ingredient_unit}
+          {predictionRows.length === 0 ? (
+            <div style={styles.emptyState}>
+              <span>No ingredients to predict yet.</span>
+            </div>
+          ) : (
+            <>
+              <div style={styles.predictionChart}>
+                {predictionRows.map(({ item, status, estDaysLeft }) => {
+                  const widthPct = Math.max(6, (estDaysLeft / maxDaysLeft) * 100);
+                  return (
+                    <div key={item.id} style={styles.predictionBarRow}>
+                      <span style={styles.predictionBarLabel} title={item.name}>{item.name}</span>
+                      <div style={styles.predictionBarTrack}>
+                        <div style={{
+                          ...styles.predictionBarFill,
+                          width: `${widthPct}%`,
+                          backgroundColor: STATUS_COLOR[status]
+                        }} />
+                      </div>
+                      <span style={{
+                        ...styles.predictionBarDays,
+                        color: STATUS_COLOR[status]
+                      }}>
+                        {estDaysLeft === 0 ? 'Out' : `${estDaysLeft}d`}
                       </span>
                     </div>
-                    <div style={styles.requestSubheading}>
-                      <span>By: {req.staff_name}</span>
-                      {req.notes && <span style={styles.requestNotes}>"{req.notes}"</span>}
-                    </div>
-                  </div>
+                  );
+                })}
+              </div>
 
-                  <div style={styles.actions}>
-                    {onRejectRequest && (
-                      <button 
-                        onClick={() => onRejectRequest(req.id)}
-                        className="btn btn-danger"
-                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                      >
-                        Reject
-                      </button>
-                    )}
-                    {onApproveRequest && (
-                      <button 
-                        onClick={() => onApproveRequest(req.id)}
-                        className="btn btn-primary"
-                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                      >
-                        Approve
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+              <div className="table-scroll">
+                <table className="crud-table" style={{ width: '100%', minWidth: 640, fontSize: '0.82rem' }}>
+                  <thead>
+                    <tr>
+                      <th>Ingredient</th>
+                      <th>Stock</th>
+                      <th>Min</th>
+                      <th>Status</th>
+                      <th>Days left</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {predictionRows.map(({ item, status, estDaysLeft, suggestedAction }) => (
+                      <tr key={item.id}>
+                        <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.name}</td>
+                        <td>{item.stock_level} {item.unit}</td>
+                        <td style={{ color: 'var(--text-muted)' }}>{item.reorder_point} {item.unit}</td>
+                        <td>
+                          <span style={{
+                            ...styles.statusPill,
+                            color: STATUS_COLOR[status],
+                            backgroundColor: `${STATUS_COLOR[status]}18`,
+                            border: `1px solid ${STATUS_COLOR[status]}33`
+                          }}>
+                            {status}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: 700, color: STATUS_COLOR[status] }}>
+                          {estDaysLeft === 0 ? 'Out of stock' : `${estDaysLeft} days`}
+                        </td>
+                        <td>
+                          <span style={styles.actionPill}>{suggestedAction}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p style={styles.predictionFoot}>
+                Supplier delivery typically takes 3–5 days. Plan restocks for critical items.
+              </p>
+            </>
+          )}
         </div>
 
         {/* Right Column: Low Stock Alerts list */}
@@ -649,7 +714,7 @@ const styles = {
     flexDirection: 'column' as const,
     gap: '24px',
     boxSizing: 'border-box' as const,
-    overflowY: 'auto' as const,
+    minHeight: 0,
     flex: 1
   },
   loadingContainer: {
@@ -682,11 +747,11 @@ const styles = {
     width: '48px',
     height: '48px',
     borderRadius: '12px',
-    backgroundColor: 'rgba(255,255,255,0.02)',
+    backgroundColor: 'var(--surface-muted)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    border: '1px solid rgba(255,255,255,0.05)'
+    border: '1px solid var(--border-glass)'
   },
   statDetails: {
     display: 'flex',
@@ -696,7 +761,7 @@ const styles = {
   },
   statLabel: {
     fontSize: '0.8rem',
-    color: '#9ca3af',
+    color: 'var(--text-muted)',
     fontWeight: '500'
   },
   statValue: {
@@ -713,7 +778,7 @@ const styles = {
   },
   trendTextMuted: {
     fontSize: '0.75rem',
-    color: '#6b7280'
+    color: 'var(--text-muted)'
   },
   trendTextGreen: {
     fontSize: '0.75rem',
@@ -760,22 +825,21 @@ const styles = {
     overflow: 'visible' as const
   },
   listsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))',
+    display: 'flex',
+    flexDirection: 'column' as const,
     gap: '20px'
   },
   listCard: {
     padding: '20px',
     display: 'flex',
     flexDirection: 'column' as const,
-    textAlign: 'left' as const,
-    minHeight: '280px'
+    textAlign: 'left' as const
   },
   listHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottom: '1px solid rgba(255,255,255,0.05)',
+    borderBottom: '1px solid var(--table-border)',
     paddingBottom: '12px',
     marginBottom: '16px'
   },
@@ -784,6 +848,12 @@ const styles = {
     fontSize: '1rem',
     fontWeight: '700',
     color: 'var(--text-primary)'
+  },
+  listSubtitle: {
+    margin: '4px 0 0',
+    fontSize: '0.75rem',
+    color: 'var(--text-muted)',
+    fontWeight: 500
   },
   listContent: {
     display: 'flex',
@@ -796,55 +866,71 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%',
-    color: '#6b7280',
+    color: 'var(--text-muted)',
     fontSize: '0.85rem',
     fontStyle: 'italic'
   },
-  requestItem: {
+  predictionChart: {
     display: 'flex',
-    justifyContent: 'space-between',
+    flexDirection: 'column' as const,
+    gap: '10px',
+    padding: '4px 0 12px',
+    borderBottom: '1px solid var(--table-border)',
+    marginBottom: '8px'
+  },
+  predictionBarRow: {
+    display: 'grid',
+    gridTemplateColumns: '140px 1fr 48px',
     alignItems: 'center',
-    padding: '12px 14px',
-    backgroundColor: 'rgba(255,255,255,0.01)',
-    border: '1px solid rgba(255,255,255,0.04)',
-    borderRadius: '8px'
+    gap: '10px'
   },
-  requestDetails: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '4px',
-    flex: 1,
-    paddingRight: '12px'
-  },
-  requestHeading: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '8px'
-  },
-  requestIngName: {
-    fontWeight: '600',
-    fontSize: '0.9rem',
-    color: 'var(--text-primary)'
-  },
-  requestQty: {
-    fontSize: '0.8rem',
-    color: '#f59e0b',
-    fontWeight: '500'
-  },
-  requestSubheading: {
-    display: 'flex',
-    flexDirection: 'column' as const,
+  predictionBarLabel: {
     fontSize: '0.75rem',
-    color: '#9ca3af'
+    fontWeight: 600,
+    color: 'var(--text-secondary)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const
   },
-  requestNotes: {
-    fontStyle: 'italic',
-    color: '#6b7280',
-    marginTop: '2px'
+  predictionBarTrack: {
+    height: '10px',
+    borderRadius: '999px',
+    backgroundColor: 'var(--surface-hover)',
+    overflow: 'hidden'
   },
-  actions: {
-    display: 'flex',
-    gap: '8px'
+  predictionBarFill: {
+    height: '100%',
+    borderRadius: '999px',
+    minWidth: '8px'
+  },
+  predictionBarDays: {
+    fontSize: '0.75rem',
+    fontWeight: 700,
+    textAlign: 'right' as const
+  },
+  statusPill: {
+    display: 'inline-block',
+    padding: '2px 8px',
+    borderRadius: '999px',
+    fontSize: '0.7rem',
+    fontWeight: 700,
+    textTransform: 'capitalize' as const
+  },
+  actionPill: {
+    display: 'inline-block',
+    padding: '3px 8px',
+    borderRadius: '999px',
+    fontSize: '0.72rem',
+    fontWeight: 600,
+    whiteSpace: 'nowrap' as const,
+    color: 'var(--text-primary)',
+    backgroundColor: 'var(--surface-muted)',
+    border: '1px solid var(--border-glass)'
+  },
+  predictionFoot: {
+    margin: '10px 0 0',
+    fontSize: '0.75rem',
+    color: 'var(--text-muted)'
   },
   lowStockItem: {
     display: 'flex',
@@ -867,7 +953,7 @@ const styles = {
   },
   lowStockCategory: {
     fontSize: '0.75rem',
-    color: '#9ca3af'
+    color: 'var(--text-muted)'
   },
   lowStockStatus: {
     display: 'flex',
@@ -887,7 +973,7 @@ const styles = {
   },
   lowStockReorder: {
     fontSize: '0.7rem',
-    color: '#6b7280',
+    color: 'var(--text-muted)',
     marginTop: '2px'
   }
 };

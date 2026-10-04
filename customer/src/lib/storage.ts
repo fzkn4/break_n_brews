@@ -7,7 +7,10 @@ export const STORAGE_KEYS = {
   orderHistory: 'bb_order_history',
   orderMeta: 'bb_order_meta',
   checkout: 'bb_checkout_details',
-  reviewedOrders: 'bb_reviewed_orders'
+  reviewedOrders: 'bb_reviewed_orders',
+  menuItems: 'bb_customer_menu_items',
+  ingredients: 'bb_customer_ingredients',
+  reviews: 'bb_customer_reviews'
 } as const;
 
 export function readStore<T>(key: string, fallback: T): T {

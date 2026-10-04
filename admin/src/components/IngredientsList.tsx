@@ -2,6 +2,34 @@ import React, { useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, X, AlertTriangle, Filter } from 'lucide-react';
 import type { Ingredient } from '../types';
 
+const INGREDIENT_CATEGORIES = [
+  'Beverages',
+  'Coffee Beans',
+  'Dairy',
+  'Grains',
+  'Meat',
+  'Packaging',
+  'Pastries',
+  'Sweeteners',
+  'Syrups'
+];
+
+const CATEGORY_LIFESPAN_DAYS: Record<string, number> = {
+  Dairy: 7,
+  Meat: 5,
+  Pastries: 14,
+  'Coffee Beans': 60,
+  Syrups: 90,
+  Packaging: 365,
+  Beverages: 180,
+  Grains: 180,
+  Sweeteners: 365
+};
+
+const defaultLifespanDays = (category: string) => CATEGORY_LIFESPAN_DAYS[category] ?? 30;
+
+const INGREDIENT_UNITS = ['kg', 'mg', 'L', 'ml', 'pcs'] as const;
+
 interface IngredientsListProps {
   ingredients: Ingredient[];
   onCreateIngredient: (data: any) => void;
@@ -27,26 +55,21 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
   const [unit, setUnit] = useState('kg');
   const [reorderPoint, setReorderPoint] = useState('5');
   const [costPerUnit, setCostPerUnit] = useState('0.00');
+  const [lifespanDays, setLifespanDays] = useState('30');
 
-  // Both lists come from the ingredients in the database; the fixed list used to omit
-  // categories the seed actually uses (Beverages, Grains, Meat), so they could not be picked.
-  const categories = useMemo(
-    () => [...new Set(ingredients.map(ing => ing.category))].sort((a, b) => a.localeCompare(b)),
-    [ingredients]
-  );
-  const units = useMemo(
-    () => [...new Set(ingredients.map(ing => ing.unit))].sort((a, b) => a.localeCompare(b)),
-    [ingredients]
-  );
-
+  const categories = useMemo(() => {
+    const fromStock = ingredients.map((ing) => ing.category);
+    return [...new Set([...INGREDIENT_CATEGORIES, ...fromStock])].sort((a, b) => a.localeCompare(b));
+  }, [ingredients]);
   const startAdd = () => {
     setEditIng(null);
     setName('');
     setCategory(categories[0] ?? '');
     setStockLevel('0');
-    setUnit(units[0] ?? '');
+    setUnit('kg');
     setReorderPoint('5');
     setCostPerUnit('0.00');
+    setLifespanDays(String(defaultLifespanDays(categories[0] ?? '')));
     setShowModal(true);
   };
 
@@ -58,6 +81,7 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
     setUnit(ing.unit);
     setReorderPoint(ing.reorder_point.toString());
     setCostPerUnit(ing.cost_per_unit.toString());
+    setLifespanDays(String(ing.lifespan_days ?? defaultLifespanDays(ing.category)));
     setShowModal(true);
   };
 
@@ -69,7 +93,8 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
       stock_level: parseFloat(stockLevel) || 0,
       unit,
       reorder_point: parseFloat(reorderPoint) || 0,
-      cost_per_unit: parseFloat(costPerUnit) || 0
+      cost_per_unit: parseFloat(costPerUnit) || 0,
+      lifespan_days: parseInt(lifespanDays, 10) || defaultLifespanDays(category)
     };
 
     if (editIng) {
@@ -88,7 +113,7 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
   });
 
   return (
-    <div style={styles.container} className="fade-in">
+    <div style={styles.container} className="page-scroll fade-in">
       {/* Search & Filter Header Bar */}
       <div style={styles.header}>
         <div style={styles.searchBar}>
@@ -102,7 +127,7 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
           />
 
           <div style={styles.filterGroup}>
-            <Filter size={16} color="#9ca3af" />
+            <Filter size={16} color="var(--text-muted)" />
             <select
               className="glass-input"
               value={categoryFilter}
@@ -124,7 +149,8 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
       </div>
 
       {/* Grid of Ingredients Table */}
-      <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className="glass-card table-shell" style={{ padding: 0 }}>
+        <div className="table-scroll">
         <table className="crud-table" style={{ width: '100%' }}>
           <thead>
             <tr>
@@ -133,6 +159,7 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
               <th>Current Stock</th>
               <th>Reorder Point</th>
               <th>Cost / Unit</th>
+              <th>Lifespan</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -140,7 +167,7 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#6b7280' }}>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                   No ingredients found matching the filter criteria.
                 </td>
               </tr>
@@ -158,11 +185,14 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
                     <td style={{ fontWeight: '700', color: isOutOfStock ? '#ef4444' : isLowStock ? '#f59e0b' : 'var(--text-primary)' }}>
                       {ing.stock_level} {ing.unit}
                     </td>
-                    <td style={{ color: '#9ca3af' }}>
+                    <td style={{ color: 'var(--text-muted)' }}>
                       {ing.reorder_point} {ing.unit}
                     </td>
                     <td style={{ fontWeight: '600' }}>
-                      ${ing.cost_per_unit.toFixed(2)}
+                      ₱{ing.cost_per_unit.toFixed(2)}
+                    </td>
+                    <td style={{ color: 'var(--text-muted)' }}>
+                      {ing.lifespan_days != null ? `${ing.lifespan_days} days` : '—'}
                     </td>
                     <td>
                       {isOutOfStock ? (
@@ -203,6 +233,7 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Add / Edit Ingredient Modal */}
@@ -234,38 +265,42 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
               <div style={styles.inputRow}>
                 <div style={{ ...styles.inputGroup, flex: 1 }}>
                   <label style={styles.label}>Category</label>
-                  <input 
+                  <select
                     className="glass-input"
-                    list="ingredient-category-options"
                     value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    placeholder="e.g. Dairy"
-                    style={{ width: '100%' }}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setCategory(next);
+                      if (!editIng) {
+                        setLifespanDays(String(defaultLifespanDays(next)));
+                      }
+                    }}
                     required
-                  />
-                  <datalist id="ingredient-category-options">
-                    {categories.map(c => (
-                      <option key={c} value={c} />
+                    style={{ width: '100%' }}
+                  >
+                    {categories.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
 
                 <div style={{ ...styles.inputGroup, width: '100px' }}>
                   <label style={styles.label}>Unit</label>
-                  <input 
+                  <select
                     className="glass-input"
-                    list="ingredient-unit-options"
                     value={unit}
                     onChange={(e) => setUnit(e.target.value)}
-                    placeholder="kg"
                     style={{ width: '100%' }}
                     required
-                  />
-                  <datalist id="ingredient-unit-options">
-                    {units.map(u => (
-                      <option key={u} value={u} />
+                  >
+                    {INGREDIENT_UNITS.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
               </div>
 
@@ -297,18 +332,35 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
                 </div>
               </div>
 
-              <div style={styles.inputGroup}>
-                <label style={styles.label}>Cost Price Per Unit ($)</label>
-                <input 
-                  type="number" 
-                  step="0.01"
-                  className="glass-input"
-                  placeholder="e.g. 18.50"
-                  value={costPerUnit}
-                  onChange={(e) => setCostPerUnit(e.target.value)}
-                  required
-                  style={{ width: '100%', boxSizing: 'border-box' }}
-                />
+              <div style={styles.inputRow}>
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                  <label style={styles.label}>Cost Price Per Unit (₱)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    className="glass-input"
+                    placeholder="e.g. 740.00"
+                    value={costPerUnit}
+                    onChange={(e) => setCostPerUnit(e.target.value)}
+                    required
+                    style={{ width: '100%', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                  <label style={styles.label}>Lifespan (days)</label>
+                  <input 
+                    type="number" 
+                    min="1"
+                    step="1"
+                    className="glass-input"
+                    placeholder="e.g. 30"
+                    value={lifespanDays}
+                    onChange={(e) => setLifespanDays(e.target.value)}
+                    required
+                    style={{ width: '100%', boxSizing: 'border-box' }}
+                  />
+                </div>
               </div>
 
               <div style={styles.modalActions}>
@@ -338,7 +390,7 @@ const styles = {
     flexDirection: 'column' as const,
     gap: '20px',
     boxSizing: 'border-box' as const,
-    overflowY: 'auto' as const,
+    minHeight: 0,
     flex: 1
   },
   header: {
@@ -433,7 +485,7 @@ const styles = {
   },
   label: {
     fontSize: '0.8rem',
-    color: '#9ca3af',
+    color: 'var(--text-muted)',
     fontWeight: '600'
   },
   modalActions: {

@@ -1,5 +1,17 @@
 import { useState } from 'react';
-import { ArrowRight, Check, Clock, Heart } from 'lucide-react';
+import {
+  ArrowRight,
+  Award,
+  Check,
+  Clock,
+  Coffee,
+  Flame,
+  Heart,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+  Star
+} from 'lucide-react';
 import ProductCard from './ProductCard';
 import CategoryRail from './CategoryRail';
 import StarRating from './StarRating';
@@ -57,47 +69,107 @@ export default function HomeView({
 
   return (
     <>
+      {/* 1. HERO SECTION (CONTAINER ISOLATED VIDEO BACKGROUND) */}
       <section className="hero">
-        <div className="hero__media" aria-hidden="true" />
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="hero__video"
+          src="/videos/hero-video.mp4"
+        />
         <div className="hero__scrim" aria-hidden="true" />
         <div className="shell hero__inner">
           <div>
-            <span className="hero__eyebrow">Welcome</span>
-            <h1 className="hero__title">We serve the richest coffee in the city</h1>
+            <div className="hero__badge-row">
+              <span className="hero__eyebrow">
+                <Star size={13} fill="currentColor" style={{ display: 'inline', marginRight: 6 }} />
+                Loved by 25,000+ Coffee Lovers
+              </span>
+            </div>
+
+            <h1 className="hero__title">Every Sip Tells a Story</h1>
             <p className="hero__tagline">“Take a break. Enjoy your brew.”</p>
 
             <div className="hero__actions">
-              <button className="btn btn-white btn-lg" onClick={() => onBrowse()}>
-                Order now
+              <button className="btn btn-primary btn-lg" onClick={() => onBrowse()}>
+                Shop Coffee
                 <ArrowRight size={17} />
               </button>
               <button className="btn btn-outline-white btn-lg" onClick={onTrack}>
-                Track my order
+                Track Order
               </button>
             </div>
 
             <dl className="hero__stats">
               <div>
                 <dd className="hero__stat-value">{menuItems.length || '—'}</dd>
-                <dt className="hero__stat-label">Items on the menu</dt>
+                <dt className="hero__stat-label">Signature Items</dt>
               </div>
               <div>
                 <dd className="hero__stat-value">{CUSTOMIZATION_LEVELS.length}</dd>
-                <dt className="hero__stat-label">Ways to customise</dt>
+                <dt className="hero__stat-label">Custom Levels</dt>
               </div>
               <div>
                 <dd className="hero__stat-value">Live</dd>
-                <dt className="hero__stat-label">Order tracking</dt>
+                <dt className="hero__stat-label">Counter Tracking</dt>
               </div>
             </dl>
           </div>
 
           <div className="hero__cup">
-            <img src="/break_and_brews.png" alt="Break and Brews latte art" />
+            <img src="/break_and_brews.png" alt="Break & Brews latte art signature" />
           </div>
         </div>
       </section>
 
+      {/* 2. VALUE PROPOSITION BAR */}
+      <section className="value-bar">
+        <div className="shell value-bar__inner">
+          <div className="value-item">
+            <div className="value-item__icon">
+              <ShieldCheck size={22} />
+            </div>
+            <div>
+              <h4 className="value-item__title">ETHICALLY SOURCED</h4>
+              <p className="value-item__desc">100% Single-Origin Beans</p>
+            </div>
+          </div>
+
+          <div className="value-item">
+            <div className="value-item__icon">
+              <Flame size={22} />
+            </div>
+            <div>
+              <h4 className="value-item__title">SMALL BATCH ROASTED</h4>
+              <p className="value-item__desc">Micro-Roasted Fresh Daily</p>
+            </div>
+          </div>
+
+          <div className="value-item">
+            <div className="value-item__icon">
+              <RefreshCw size={22} />
+            </div>
+            <div>
+              <h4 className="value-item__title">LIVE ORDER TRACKING</h4>
+              <p className="value-item__desc">Real-Time Kitchen Updates</p>
+            </div>
+          </div>
+
+          <div className="value-item">
+            <div className="value-item__icon">
+              <Award size={22} />
+            </div>
+            <div>
+              <h4 className="value-item__title">SATISFACTION GUARANTEED</h4>
+              <p className="value-item__desc">Crafted with Barista Care</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* LIVE ORDER STRIP */}
       {liveOrder && (
         <div className="order-strip">
           <div className="shell order-strip__inner">
@@ -113,6 +185,7 @@ export default function HomeView({
         </div>
       )}
 
+      {/* CATEGORY RAIL */}
       {categories.length > 0 && (
         <div className="category-band">
           <div className="shell">
@@ -126,6 +199,7 @@ export default function HomeView({
         </div>
       )}
 
+      {/* SAVED FAVORITES */}
       {saved.length > 0 && (
         <section className="section shell">
           <div className="section-head">
@@ -134,55 +208,114 @@ export default function HomeView({
               Saved by you
             </span>
             <h2 className="section-title">Your usual order</h2>
-            <p className="section-subtitle">The things you keep coming back for, one tap away.</p>
+            <p className="section-subtitle">The items you keep coming back for, one tap away.</p>
           </div>
           {renderGrid(saved)}
         </section>
       )}
 
+      {/* 3. SIGNATURE BLENDS GRID */}
       <section className="section shell">
         <div className="section-head">
-          <span className="section-eyebrow">From the bar</span>
-          <h2 className="section-title">Our special coffee</h2>
+          <span className="section-eyebrow">
+            <Coffee size={13} style={{ display: 'inline', marginRight: 6 }} />
+            From the Bar
+          </span>
+          <h2 className="section-title">Our Signature Blends</h2>
           <p className="section-subtitle">
-            Pulled to order and adjustable down to the syrup — pick a drink and set it your way.
+            Pulled to order and adjustable down to syrup &amp; ice — pick a drink and craft it your way.
           </p>
         </div>
         {loading ? <SkeletonGrid /> : renderGrid(drinks)}
       </section>
 
+      {/* 4. SECONDARY FEATURED BANNER (/images/banner-bg.jpg) */}
       <section className="feature-banner">
-        <div className="shell">
-          <h2 className="feature-banner__title">Check out our best coffee</h2>
+        <div className="feature-banner__overlay" />
+        <div className="shell feature-banner__inner">
+          <span className="feature-banner__badge">
+            <Sparkles size={14} style={{ display: 'inline', marginRight: 6 }} />
+            Featured Artisanal Menu
+          </span>
+          <h2 className="feature-banner__title">Handcrafted Coffee &amp; Freshly Baked Delights</h2>
           <p className="feature-banner__text">
-            Every drink is built from the same fresh ingredients the kitchen counts each morning, so what you
-            see on the menu is what we can actually make right now.
+            Every drink is built from premium fresh ingredients prepped daily by our baristas and kitchen staff.
+            Pair your favorite roast with a warm croissant or fresh rice bowl.
           </p>
-          <button className="btn btn-white btn-lg" onClick={() => onBrowse()}>
-            Explore the full menu
+          <button className="btn btn-primary btn-lg" onClick={() => onBrowse()}>
+            Explore Full Menu
             <ArrowRight size={17} />
           </button>
         </div>
       </section>
 
+      {/* 5. FOOD & PASTRY ACCENT GRID SECTION (/images/pastry-bg.jpg) */}
       {kitchen.length > 0 && (
-        <section className="section shell">
-          <div className="section-head">
-            <span className="section-eyebrow">From the kitchen</span>
-            <h2 className="section-title">Plates and platters</h2>
-            <p className="section-subtitle">Rice bowls, snacks and sharing platters for a longer session.</p>
+        <section className="pastry-accent-section">
+          <div className="shell">
+            <div className="section-head">
+              <span className="section-eyebrow">From the Kitchen</span>
+              <h2 className="section-title">Plates, Pastries &amp; Savory Meals</h2>
+              <p className="section-subtitle">Fresh rice bowls, golden pastries, and sharing platters.</p>
+            </div>
+            {renderGrid(kitchen)}
           </div>
-          {renderGrid(kitchen)}
         </section>
       )}
 
+      {/* 6. PROCESS INDICATOR: FROM BEAN TO BREW IN 4 STEPS */}
+      <section className="process-section">
+        <div className="shell">
+          <div className="section-head">
+            <span className="section-eyebrow">The Crafting Journey</span>
+            <h2 className="section-title">From Bean to Brew in 4 Steps</h2>
+            <p className="section-subtitle">How we make every cup special, from counter to your table.</p>
+          </div>
+
+          <div className="process-grid">
+            <div className="process-card">
+              <div className="process-card__step">01</div>
+              <h3 className="process-card__title">Choose Blend</h3>
+              <p className="process-card__text">
+                Browse our curated menu of signature roasts, artisanal teas, and house-made pastries.
+              </p>
+            </div>
+
+            <div className="process-card">
+              <div className="process-card__step">02</div>
+              <h3 className="process-card__title">Kitchen Prep</h3>
+              <p className="process-card__text">
+                Our baristas measure single-origin beans and pull rich espresso shots fresh to order.
+              </p>
+            </div>
+
+            <div className="process-card">
+              <div className="process-card__step">03</div>
+              <h3 className="process-card__title">Pack &amp; Ready</h3>
+              <p className="process-card__text">
+                Custom milk, sweetness, and ice levels are hand-mixed to your exact specifications.
+              </p>
+            </div>
+
+            <div className="process-card">
+              <div className="process-card__step">04</div>
+              <h3 className="process-card__title">Brew &amp; Enjoy</h3>
+              <p className="process-card__text">
+                Follow your order status live on screen as it gets served straight to your table.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 7. TESTIMONIAL SECTION ("Words from Our Coffee Family") */}
       {reviews.length > 0 && (
         <section className="section shell">
           <div className="section-head">
-            <span className="section-eyebrow">Come and join</span>
-            <h2 className="section-title">Our happy customers</h2>
+            <span className="section-eyebrow">Words from Our Coffee Family</span>
+            <h2 className="section-title">Loved by Our Community</h2>
             <p className="section-subtitle">
-              Left by people who ordered here, published by the team.
+              Real reviews left by customers who visited Break &amp; Brews.
             </p>
           </div>
           <div className="review-grid">
@@ -194,7 +327,9 @@ export default function HomeView({
                   </span>
                   <div>
                     <h3 className="review-card__name">{review.customer_name}</h3>
-                    {review.role && <span className="review-card__role">{review.role}</span>}
+                    <span className="review-card__role">
+                      {review.role || 'Verified Coffee Lover'}
+                    </span>
                   </div>
                   <div className="review-card__stars">
                     <StarRating value={review.rating} size={14} />
@@ -207,10 +342,14 @@ export default function HomeView({
         </section>
       )}
 
+      {/* 8. SUBSCRIPTION / NEWSLETTER FOOTER BANNER */}
       <section className="newsletter">
-        <div className="shell">
-          <h2 className="section-title">Join in and get 15% off</h2>
-          <p className="section-subtitle">Subscribe for seasonal roasts, new plates and the odd discount code.</p>
+        <div className="newsletter__overlay" />
+        <div className="shell newsletter__inner">
+          <h2 className="section-title section-title--light">Start Your Coffee Journey Today</h2>
+          <p className="section-subtitle section-subtitle--light">
+            Subscribe for seasonal roasts, new menu alerts, and an exclusive 15% discount on your next order.
+          </p>
           <NewsletterForm onSubscribe={onSubscribe} />
         </div>
       </section>
@@ -263,7 +402,7 @@ function NewsletterForm({ onSubscribe }: { onSubscribe: (email: string) => Promi
       <input
         id="newsletter-email"
         type="email"
-        placeholder="Email address"
+        placeholder="Enter your email address"
         value={email}
         onChange={(event) => setEmail(event.target.value)}
         required

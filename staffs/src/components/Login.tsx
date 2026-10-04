@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Key, Mail, Eye, EyeOff, AlertTriangle, Coffee } from 'lucide-react';
+import { Key, User, Eye, EyeOff, AlertTriangle, Coffee } from 'lucide-react';
 import { API_URL } from '../App';
 
 interface LoginProps {
@@ -7,7 +7,7 @@ interface LoginProps {
 }
 
 export const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -18,9 +18,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError(null);
     setLoading(true);
 
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) {
-      setError('Please enter your work email');
+    const normalizedUsername = username.trim();
+    if (!normalizedUsername) {
+      setError('Please enter your username');
       setLoading(false);
       return;
     }
@@ -32,7 +32,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: normalizedEmail,
+          username: normalizedUsername,
+          email: normalizedUsername,
           password: password,
         }),
       });
@@ -61,55 +62,54 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       <div style={styles.loginBox} className="card fade-in">
         <div style={styles.brandHeader}>
           <div style={styles.logoContainer}>
-            <Coffee size={32} color="var(--accent-primary)" />
+            <Coffee size={32} color="#f59e0b" />
           </div>
           <h2 style={styles.brandTitle}>BREAK & BREWS</h2>
-          <p style={styles.brandSubtitle}>Staff Operations Portal</p>
+          <p style={styles.brandSubtitle}>Admin</p>
         </div>
 
         {error && (
           <div style={styles.errorAlert}>
-            <AlertTriangle size={18} color="var(--danger)" />
+            <AlertTriangle size={18} color="#ef4444" style={{ flexShrink: 0 }} />
             <span style={styles.errorText}>{error}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} style={styles.form}>
           <div style={styles.inputGroup}>
-            <label style={styles.label}>Work Email Address</label>
+            <label style={styles.label}>Username</label>
             <div style={styles.inputWrapper}>
-              <Mail size={18} color="var(--text-muted)" style={styles.inputIcon} />
+              <User size={18} style={styles.inputIcon} />
               <input
-                type="email"
+                type="text"
                 placeholder="name@breakandbrews.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 style={styles.input}
-                className="glass-input"
                 required
               />
             </div>
           </div>
 
           <div style={styles.inputGroup}>
-            <label style={styles.label}>Security Password</label>
+            <label style={styles.label}>Password</label>
             <div style={styles.inputWrapper}>
-              <Key size={18} color="var(--text-muted)" style={styles.inputIcon} />
+              <Key size={18} style={styles.inputIcon} />
               <input
                 type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 style={styles.input}
-                className="glass-input"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 style={styles.eyeBtn}
+                title={showPassword ? 'Hide Password' : 'Show Password'}
               >
-                {showPassword ? <EyeOff size={18} color="var(--text-muted)" /> : <Eye size={18} color="var(--text-muted)" />}
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
           </div>
@@ -117,10 +117,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           <button
             type="submit"
             disabled={loading}
-            style={styles.submitBtn}
-            className="btn btn-primary"
+            style={{
+              ...styles.submitBtn,
+              opacity: loading ? 0.7 : 1,
+              cursor: loading ? 'not-allowed' : 'pointer'
+            }}
           >
-            {loading ? 'Authenticating...' : 'Sign In to Portal'}
+            {loading ? 'Logging in...' : 'Log in'}
           </button>
         </form>
       </div>
@@ -135,19 +138,28 @@ const styles = {
     justifyContent: 'center',
     minHeight: '100vh',
     width: '100vw',
-    backgroundColor: 'var(--bg-primary)',
-    backgroundImage: 'var(--bg-gradient)',
-    padding: '24px',
+    backgroundImage: 'linear-gradient(rgba(14, 10, 8, 0.35), rgba(14, 10, 8, 0.35)), url("/login-bg.jpg")',
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
+    padding: '20px',
     boxSizing: 'border-box' as const,
     position: 'relative' as const,
   },
   loginBox: {
     width: '100%',
-    maxWidth: '440px',
-    padding: '40px',
+    maxWidth: '430px',
+    padding: '44px 36px',
+    backgroundColor: 'rgba(18, 14, 11, 0.42)',
+    backdropFilter: 'blur(16px)',
+    WebkitBackdropFilter: 'blur(16px)',
+    border: '1px solid rgba(245, 158, 11, 0.3)',
+    borderRadius: '28px',
+    boxShadow: '0 30px 60px -12px rgba(0, 0, 0, 0.75), inset 0 1px 1px rgba(255, 255, 255, 0.15)',
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '24px',
+    boxSizing: 'border-box' as const,
   },
   brandHeader: {
     display: 'flex',
@@ -156,43 +168,47 @@ const styles = {
     textAlign: 'center' as const,
   },
   logoContainer: {
-    width: '64px',
-    height: '64px',
-    borderRadius: '16px',
-    backgroundColor: 'rgba(148, 118, 86, 0.08)',
-    border: '1px solid rgba(148, 118, 86, 0.2)',
+    width: '68px',
+    height: '68px',
+    borderRadius: '18px',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    border: '1px solid rgba(245, 158, 11, 0.4)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: '16px',
-    boxShadow: '0 0 20px rgba(148, 118, 86, 0.05)',
+    boxShadow: '0 0 25px rgba(245, 158, 11, 0.25)',
   },
   brandTitle: {
     margin: 0,
-    fontSize: '1.6rem',
+    fontSize: '1.65rem',
     fontWeight: '800',
-    color: 'var(--text-primary)',
-    letterSpacing: '2px',
+    color: '#ffffff',
+    letterSpacing: '2.5px',
+    textTransform: 'uppercase' as const,
+    textShadow: '0 2px 10px rgba(0,0,0,0.5)',
   },
   brandSubtitle: {
-    margin: '4px 0 0 0',
+    margin: '6px 0 0 0',
     fontSize: '0.85rem',
-    color: 'var(--text-muted)',
+    color: '#f59e0b',
     fontWeight: '600',
-    letterSpacing: '0.5px',
+    letterSpacing: '1.5px',
+    textTransform: 'uppercase' as const,
+    textShadow: '0 1px 6px rgba(0,0,0,0.6)',
   },
   errorAlert: {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    backgroundColor: 'var(--danger-bg)',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    border: '1px solid rgba(239, 68, 68, 0.4)',
     padding: '12px 16px',
-    borderRadius: '12px',
+    borderRadius: '14px',
   },
   errorText: {
     fontSize: '0.85rem',
-    color: 'var(--danger)',
+    color: '#fca5a5',
     fontWeight: '500',
   },
   form: {
@@ -203,36 +219,49 @@ const styles = {
   inputGroup: {
     display: 'flex',
     flexDirection: 'column' as const,
+    alignItems: 'center',
     gap: '8px',
   },
   label: {
-    fontSize: '0.8rem',
+    fontSize: '0.78rem',
     fontWeight: '700',
-    color: 'var(--text-muted)',
+    color: 'rgba(255, 255, 255, 0.9)',
     textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
+    letterSpacing: '0.08em',
+    textAlign: 'center' as const,
+    width: '100%',
+    textShadow: '0 1px 4px rgba(0,0,0,0.5)',
   },
   inputWrapper: {
     position: 'relative' as const,
     display: 'flex',
     alignItems: 'center',
+    width: '100%',
   },
   inputIcon: {
     position: 'absolute' as const,
-    left: '14px',
+    left: '16px',
     pointerEvents: 'none' as const,
+    color: 'rgba(245, 158, 11, 0.85)',
   },
   input: {
     width: '100%',
-    paddingLeft: '44px',
-    paddingRight: '44px',
+    paddingLeft: '48px',
+    paddingRight: '48px',
     boxSizing: 'border-box' as const,
-    height: '46px',
+    height: '48px',
     fontSize: '0.95rem',
+    backgroundColor: 'rgba(0, 0, 0, 0.38)',
+    border: '1px solid rgba(255, 255, 255, 0.22)',
+    borderRadius: '14px',
+    color: '#ffffff',
+    textAlign: 'center' as const,
+    outline: 'none',
+    transition: 'all 0.2s ease-in-out',
   },
   eyeBtn: {
     position: 'absolute' as const,
-    right: '12px',
+    right: '14px',
     background: 'none',
     border: 'none',
     cursor: 'pointer',
@@ -241,13 +270,23 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     outline: 'none',
+    color: 'rgba(255, 255, 255, 0.65)',
   },
   submitBtn: {
     width: '100%',
-    height: '46px',
+    height: '48px',
+    display: 'flex',
+    alignItems: 'center',
     justifyContent: 'center',
     marginTop: '8px',
-    fontSize: '0.95rem',
+    fontSize: '1rem',
     fontWeight: '700',
+    color: '#0f0c0a',
+    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+    border: 'none',
+    borderRadius: '14px',
+    boxShadow: '0 4px 20px rgba(245, 158, 11, 0.35)',
+    letterSpacing: '0.5px',
+    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
   },
 };

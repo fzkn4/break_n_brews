@@ -15,15 +15,20 @@ import {
   availabilityOf,
   cartCount,
   cartLineId,
+  defaultProductSize,
+  getItemPrice,
+  offeredSizesOf,
   reservedByCart,
   stockMapFrom
 } from './lib/catalog';
 import { readStore, writeStore, clearStore, STORAGE_KEYS } from './lib/storage';
+import { hydrateAndMergeMenuItems } from './lib/menuStorage';
 import type {
   CartItem,
   CustomizationLevel,
   Ingredient,
   MenuItem,
+  ProductSize,
   Order,
   OrderMeta,
   Review,
@@ -43,16 +48,27 @@ const DEFAULT_DETAILS: CheckoutDetails = {
   payment: 'cash'
 };
 
+/** `/?table=4` is what a printed table QR opens. */
+function readQrTable(): string | null {
+  const raw = new URLSearchParams(window.location.search).get('table')?.trim() ?? '';
+  return /^[A-Za-z0-9-]{1,12}$/.test(raw) ? raw : null;
+}
+
 function App() {
   // ----- View & overlays ---------------------------------------------------
-  const [view, setView] = useState<View>('home');
+  const qrTable = useMemo(() => readQrTable(), []);
+  const [view, setView] = useState<View>(() => (readQrTable() ? 'menu' : 'home'));
   const [cartOpen, setCartOpen] = useState(false);
   const [sheetItem, setSheetItem] = useState<MenuItem | null>(null);
 
   // ----- Catalog -----------------------------------------------------------
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(() =>
+    hydrateAndMergeMenuItems(readStore<MenuItem[]>(STORAGE_KEYS.menuItems, []))
+  );
+  const [ingredients, setIngredients] = useState<Ingredient[]>(() =>
+    readStore<Ingredient[]>(STORAGE_KEYS.ingredients, [])
+  );
+  const [loading, setLoading] = useState(false);
   const [offline, setOffline] = useState(false);
 
   // ----- Browsing ----------------------------------------------------------
@@ -63,9 +79,11 @@ function App() {
 
   // ----- Cart & checkout ---------------------------------------------------
   const [cart, setCart] = useState<CartItem[]>(() => readStore<CartItem[]>(STORAGE_KEYS.cart, []));
-  const [details, setDetails] = useState<CheckoutDetails>(() =>
-    readStore<CheckoutDetails>(STORAGE_KEYS.checkout, DEFAULT_DETAILS)
-  );
+  const [details, setDetails] = useState<CheckoutDetails>(() => {
+    const saved = readStore<CheckoutDetails>(STORAGE_KEYS.checkout, DEFAULT_DETAILS);
+    const table = readQrTable();
+    return table ? { ...saved, dining: 'dine_in', table } : saved;
+  });
   const [submitting, setSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
@@ -77,12 +95,14 @@ function App() {
     readStore<number[]>(STORAGE_KEYS.orderHistory, [])
   );
   const [orders, setOrders] = useState<Record<number, Order>>({});
-  const [orderMeta, setOrderMeta] = useState<Record<number, OrderMeta>>(() =>
+  const [orderMeta, setOrderMeta] = useState<Record<number, OrderMeta>>( () =>
     readStore<Record<number, OrderMeta>>(STORAGE_KEYS.orderMeta, {})
   );
 
   // ----- Reviews -----------------------------------------------------------
-  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviews, setReviews] = useState<Review[]>(() =>
+    readStore<Review[]>(STORAGE_KEYS.reviews, [])
+  );
   const [reviewedOrders, setReviewedOrders] = useState<number[]>(() =>
     readStore<number[]>(STORAGE_KEYS.reviewedOrders, [])
   );
@@ -99,6 +119,8 @@ function App() {
     setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 3200);
   }, []);
 
+  const closeCart = useCallback(() => setCartOpen(false), []);
+
   // ----- Persistence -------------------------------------------------------
   useEffect(() => writeStore(STORAGE_KEYS.cart, cart), [cart]);
   useEffect(() => writeStore(STORAGE_KEYS.favorites, favorites), [favorites]);
@@ -106,6 +128,9 @@ function App() {
   useEffect(() => writeStore(STORAGE_KEYS.orderHistory, historyIds), [historyIds]);
   useEffect(() => writeStore(STORAGE_KEYS.orderMeta, orderMeta), [orderMeta]);
   useEffect(() => writeStore(STORAGE_KEYS.reviewedOrders, reviewedOrders), [reviewedOrders]);
+  useEffect(() => writeStore(STORAGE_KEYS.menuItems, menuItems), [menuItems]);
+  useEffect(() => writeStore(STORAGE_KEYS.ingredients, ingredients), [ingredients]);
+  useEffect(() => writeStore(STORAGE_KEYS.reviews, reviews), [reviews]);
 
   // ----- Catalog fetching --------------------------------------------------
   const loadCatalog = useCallback(async () => {
@@ -114,15 +139,16 @@ function App() {
         fetch(`${API_URL}/menu`),
         fetch(`${API_URL}/ingredients`)
       ]);
-      if (menuRes.ok) {
-        const data: MenuItem[] = await menuRes.json();
-        setMenuItems(data.filter((item) => item.is_available));
-      }
-      // Stock levels drive the availability badges; without them we simply stop showing them.
+      const data: MenuItem[] = menuRes.ok ? await menuRes.json() : [];
+      const hydrated = hydrateAndMergeMenuItems(data);
+      setMenuItems(hydrated.filter((item) => item.is_available));
+
       if (ingredientRes.ok) setIngredients(await ingredientRes.json());
-      setOffline(!menuRes.ok);
+      setOffline(!menuRes.ok && hydrated.length === 0);
     } catch {
-      setOffline(true);
+      const hydrated = hydrateAndMergeMenuItems([]);
+      setMenuItems(hydrated.filter((item) => item.is_available));
+      setOffline(hydrated.length === 0);
     } finally {
       setLoading(false);
     }
@@ -240,15 +266,20 @@ function App() {
   };
 
   const toggleFavorite = (id: number) => {
-    setFavorites((current) => {
-      const isFavorite = current.includes(id);
-      notify(isFavorite ? 'Removed from favourites' : 'Saved to favourites', 'info');
-      return isFavorite ? current.filter((favorite) => favorite !== id) : [...current, id];
-    });
+    const isFavorite = favorites.includes(id);
+    notify(isFavorite ? 'Removed from Favorites' : 'Saved to Favorites', 'info');
+    setFavorites((current) =>
+      isFavorite ? current.filter((favorite) => favorite !== id) : [...current, id]
+    );
   };
 
-  const addToCart = (item: MenuItem, levels: Record<number, CustomizationLevel>, quantity: number) => {
-    const lineId = cartLineId(item.id, levels);
+  const addToCart = (
+    item: MenuItem,
+    levels: Record<number, CustomizationLevel>,
+    quantity: number,
+    size?: ProductSize
+  ) => {
+    const lineId = cartLineId(item.id, levels, size ?? 'Regular');
     const customizations = item.ingredients
       .filter((ingredient) => ingredient.is_customizable)
       .map((ingredient) => ({
@@ -266,7 +297,7 @@ function App() {
       }
       return [
         ...current,
-        { id: lineId, menuItemId: item.id, name: item.name, price: item.price, quantity, customizations }
+        { id: lineId, menuItemId: item.id, name: item.name, price: getItemPrice(item, size), quantity, size, customizations }
       ];
     });
 
@@ -302,10 +333,15 @@ function App() {
           items: cart.map((line) => ({
             menu_item_id: line.menuItemId,
             quantity: line.quantity,
+            size: line.size ?? null,
             customizations: line.customizations
           })),
           status: 'pending',
-          payment_method: details.payment
+          payment_method: details.payment,
+          customer_name: details.name.trim(),
+          table_label: details.dining === 'dine_in' ? details.table.trim() : null,
+          dining: details.dining,
+          channel: qrTable ? 'qr' : 'counter'
         })
       });
 
@@ -356,13 +392,22 @@ function App() {
         continue;
       }
       const levels: Record<number, CustomizationLevel> = {};
-      for (const custom of orderItem.customizations) levels[custom.ingredient_id] = custom.level;
+      for (const custom of orderItem.customizations) {
+        const level = custom.level;
+        if (level === 'Less' || level === 'Regular' || level === 'Extra') {
+          levels[custom.ingredient_id] = level;
+        }
+      }
+      const offered = offeredSizesOf(item);
+      const stored = orderItem.size as ProductSize | undefined;
+      const size = stored && offered.includes(stored) ? stored : defaultProductSize(item);
       lines.push({
-        id: cartLineId(item.id, levels),
+        id: cartLineId(item.id, levels, size),
         menuItemId: item.id,
         name: item.name,
         price: item.price,
         quantity: orderItem.quantity,
+        size,
         customizations: orderItem.customizations
       });
     }
@@ -435,6 +480,13 @@ function App() {
       />
 
       <main className="app-main">
+        {qrTable && (
+          <div className="shell" style={{ paddingTop: 16 }}>
+            <div className="table-banner" role="status">
+              Ordering for table {qrTable}. Your drink is sent to the counter with this table already attached.
+            </div>
+          </div>
+        )}
         {offline && !loading && (
           <div className="shell" style={{ paddingTop: 18 }}>
             <div className="callout callout--warning">
@@ -533,10 +585,11 @@ function App() {
           stock={stock}
           reserved={reserved}
           details={details}
+          tableLocked={Boolean(qrTable)}
           submitting={submitting}
           error={checkoutError}
           onDetailsChange={setDetails}
-          onClose={() => setCartOpen(false)}
+          onClose={closeCart}
           onQuantityChange={changeQuantity}
           onRemove={removeLine}
           onBrowse={() => browse()}

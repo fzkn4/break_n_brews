@@ -30,14 +30,14 @@ export const ManageReviews: React.FC<ManageReviewsProps> = ({
     : '—';
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} className="page-scroll fade-in">
       <div style={styles.header}>
         <p style={styles.subtitle}>
           Customer reviews appear on the storefront only once you publish them.
         </p>
 
         <div style={styles.filterGroup}>
-          <Filter size={16} color="#9ca3af" />
+          <Filter size={16} color="var(--text-muted)" />
           <select
             className="glass-input"
             value={filter}
@@ -182,7 +182,7 @@ const styles = {
     flexDirection: 'column' as const,
     gap: '20px',
     boxSizing: 'border-box' as const,
-    overflowY: 'auto' as const,
+    minHeight: 0,
     flex: 1
   },
   header: {
@@ -316,7 +316,7 @@ const styles = {
   emailChip: {
     padding: '5px 12px',
     borderRadius: '999px',
-    backgroundColor: 'var(--accent-light, rgba(148,118,86,0.12))',
+    backgroundColor: 'var(--surface-muted)',
     border: '1px solid var(--border-glass)',
     fontSize: '0.82rem',
     color: 'var(--text-primary)'

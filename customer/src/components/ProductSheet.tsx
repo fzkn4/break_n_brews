@@ -2,27 +2,36 @@ import { useMemo, useState } from 'react';
 import { Minus, Plus, ShoppingBag, TriangleAlert, X } from 'lucide-react';
 import {
   CUSTOMIZATION_LEVELS,
+  defaultProductSize,
   describeItem,
   formatPrice,
+  formatRecipeAmount,
+  getItemPrice,
+  offeredSizesOf,
   productImage,
+  recipeQtyForSize,
   servingsAvailable,
   titleCase
 } from '../lib/catalog';
 import type { StockMap } from '../lib/catalog';
 import SmartImage from './SmartImage';
 import { useDialogBehavior } from '../lib/useDialogBehavior';
-import type { CustomizationLevel, MenuItem } from '../types';
+import type { CustomizationLevel, MenuItem, ProductSize } from '../types';
 
 interface ProductSheetProps {
   item: MenuItem;
   stock: StockMap;
   reserved: Map<number, number>;
   onClose: () => void;
-  onAdd: (item: MenuItem, levels: Record<number, CustomizationLevel>, quantity: number) => void;
+  onAdd: (
+    item: MenuItem,
+    levels: Record<number, CustomizationLevel>,
+    quantity: number,
+    size?: ProductSize
+  ) => void;
 }
 
 const LEVEL_HINT: Record<CustomizationLevel, string> = {
-  None: 'leave it out',
   Less: 'half the usual',
   Regular: 'as the recipe',
   Extra: 'half again more'
@@ -30,7 +39,9 @@ const LEVEL_HINT: Record<CustomizationLevel, string> = {
 
 export default function ProductSheet({ item, stock, reserved, onClose, onAdd }: ProductSheetProps) {
   const customizable = useMemo(() => item.ingredients.filter((ing) => ing.is_customizable), [item]);
+  const offeredSizes = offeredSizesOf(item);
 
+  const [size, setSize] = useState<ProductSize>(defaultProductSize(item) ?? 'Regular');
   const [levels, setLevels] = useState<Record<number, CustomizationLevel>>(() =>
     Object.fromEntries(customizable.map((ing) => [ing.ingredient_id, 'Regular' as CustomizationLevel]))
   );
@@ -40,15 +51,23 @@ export default function ProductSheet({ item, stock, reserved, onClose, onAdd }: 
 
   /** Recomputed per level change: "Extra" on a scarce syrup really does cut how many we can make. */
   const maxQuantity = useMemo(() => {
-    const available = servingsAvailable(item, stock, reserved, levels);
+    const available = servingsAvailable(item, stock, reserved, levels, size);
     return Number.isFinite(available) ? Math.max(0, available) : 99;
-  }, [item, stock, reserved, levels]);
+  }, [item, stock, reserved, levels, size]);
 
   const effectiveQty = Math.min(quantity, Math.max(1, maxQuantity));
   const isCustomised = customizable.some((ing) => levels[ing.ingredient_id] !== 'Regular');
 
   const setLevel = (ingredientId: number, level: CustomizationLevel) => {
     setLevels((prev) => ({ ...prev, [ingredientId]: level }));
+  };
+
+  const customizationAmountLabel = (ingredientId: number, level: CustomizationLevel): string => {
+    const recipe = item.ingredients.find((r) => r.ingredient_id === ingredientId);
+    if (!recipe) return '';
+    const base = recipeQtyForSize(recipe, size);
+    const mult = level === 'Less' ? 0.5 : level === 'Extra' ? 1.5 : 1.0;
+    return formatRecipeAmount(base * mult, recipe.unit);
   };
 
   return (
@@ -75,6 +94,25 @@ export default function ProductSheet({ item, stock, reserved, onClose, onAdd }: 
             </h2>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: 6 }}>{describeItem(item)}</p>
           </div>
+
+          {offeredSizes.length > 0 && (
+            <div className="option-group">
+              <span className="option-group__label">Size</span>
+              <div className="chip-row" role="radiogroup" aria-label="Size">
+                {offeredSizes.map((option) => (
+                  <button
+                    key={option}
+                    role="radio"
+                    aria-checked={size === option}
+                    className={`chip chip--grow${size === option ? ' is-active' : ''}`}
+                    onClick={() => setSize(option)}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {maxQuantity > 0 && maxQuantity <= 5 && (
             <div className="callout callout--warning">
@@ -137,7 +175,10 @@ export default function ProductSheet({ item, stock, reserved, onClose, onAdd }: 
                           className={`chip chip--grow${current === level ? ' is-active' : ''}`}
                           onClick={() => setLevel(ing.ingredient_id, level)}
                         >
-                          {level}
+                          <span>{level}</span>
+                          <span style={{ display: 'block', fontSize: '0.68rem', opacity: 0.85, marginTop: 2 }}>
+                            {customizationAmountLabel(ing.ingredient_id, level)}
+                          </span>
                         </button>
                       ))}
                     </div>
@@ -180,10 +221,10 @@ export default function ProductSheet({ item, stock, reserved, onClose, onAdd }: 
           <button
             className="btn btn-primary btn-lg btn-block"
             disabled={maxQuantity === 0}
-            onClick={() => onAdd(item, levels, effectiveQty)}
+            onClick={() => onAdd(item, levels, effectiveQty, offeredSizes.length > 0 ? size : undefined)}
           >
             <ShoppingBag size={18} />
-            Add to order · {formatPrice(item.price * effectiveQty)}
+            Add to order · {formatPrice(getItemPrice(item, offeredSizes.length > 0 ? size : undefined) * effectiveQty)}
           </button>
         </div>
       </div>

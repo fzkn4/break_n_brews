@@ -6,6 +6,8 @@ import { useEffect, useRef } from 'react';
  */
 export function useDialogBehavior<T extends HTMLElement>(open: boolean, onClose: () => void) {
   const ref = useRef<T | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
@@ -17,7 +19,7 @@ export function useDialogBehavior<T extends HTMLElement>(open: boolean, onClose:
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
       }
     };
     document.addEventListener('keydown', onKeyDown);
@@ -32,7 +34,7 @@ export function useDialogBehavior<T extends HTMLElement>(open: boolean, onClose:
       document.body.style.overflow = overflow;
       trigger?.focus?.({ preventScroll: true });
     };
-  }, [open, onClose]);
+  }, [open]);
 
   return ref;
 }

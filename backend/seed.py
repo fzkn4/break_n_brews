@@ -1,11 +1,16 @@
+import json
 import random
 from datetime import datetime, timedelta
 from decimal import Decimal
-from models import db, Staff, Ingredient, MenuItem, MenuItemIngredient, IngredientRequest, StockInLog, Order, OrderItem, Transaction, Review, Subscriber
+from models import (
+    db, Staff, Ingredient, MenuItem, MenuItemIngredient, IngredientRequest, StockInLog, Order, OrderItem,
+    Transaction, Review, Subscriber, is_sizeable_category, SIZE_LEVELS,
+)
 
 def seed_database():
     # Drop all tables and recreate them to ensure a fresh schema reset
     print("Dropping all existing tables...")
+    db.session.remove()
     db.drop_all()
     print("Creating all tables from new schema...")
     db.create_all()
@@ -36,27 +41,27 @@ def seed_database():
 
     # 2. Seed Ingredients
     ing_map = {
-        "beans": Ingredient(name="Espresso Roast Beans", category="Coffee Beans", stock_level=22.5, unit="kg", reorder_point=8.0, cost_per_unit=Decimal('18.50')),
-        "milk": Ingredient(name="Whole Milk", category="Dairy", stock_level=32.0, unit="L", reorder_point=12.0, cost_per_unit=Decimal('2.20')),
-        "oatmilk": Ingredient(name="Oat Milk", category="Dairy", stock_level=18.0, unit="L", reorder_point=5.0, cost_per_unit=Decimal('3.50')),
-        "sugar": Ingredient(name="White Sugar", category="Sweeteners", stock_level=12.0, unit="kg", reorder_point=4.0, cost_per_unit=Decimal('2.80')),
-        "vanilla": Ingredient(name="Vanilla Syrup", category="Syrups", stock_level=4.5, unit="L", reorder_point=2.0, cost_per_unit=Decimal('8.50')),
-        "caramel": Ingredient(name="Caramel Sauce", category="Syrups", stock_level=3.5, unit="L", reorder_point=2.0, cost_per_unit=Decimal('10.00')),
-        "cups": Ingredient(name="12oz To-Go Cups", category="Packaging", stock_level=450.0, unit="pcs", reorder_point=150.0, cost_per_unit=Decimal('0.15')),
-        "straws": Ingredient(name="Paper Straws", category="Packaging", stock_level=180.0, unit="pcs", reorder_point=100.0, cost_per_unit=Decimal('0.04')),
-        "croissant": Ingredient(name="Butter Croissants (Frozen)", category="Pastries", stock_level=35.0, unit="pcs", reorder_point=10.0, cost_per_unit=Decimal('1.80')),
-        "choc_croissant": Ingredient(name="Chocolate Croissants (Frozen)", category="Pastries", stock_level=22.0, unit="pcs", reorder_point=8.0, cost_per_unit=Decimal('2.10')),
-        "ice": Ingredient(name="Ice Cubes", category="Sweeteners", stock_level=50.0, unit="kg", reorder_point=10.0, cost_per_unit=Decimal('0.50')),
-        "beer": Ingredient(name="Heineken Beer Bottle", category="Beverages", stock_level=48.0, unit="pcs", reorder_point=12.0, cost_per_unit=Decimal('2.50')),
-        "wine": Ingredient(name="Red Wine Bottle", category="Beverages", stock_level=12.0, unit="pcs", reorder_point=3.0, cost_per_unit=Decimal('15.00')),
-        "rice": Ingredient(name="Jasmine Rice", category="Grains", stock_level=40.0, unit="kg", reorder_point=10.0, cost_per_unit=Decimal('1.80')),
-        "beef": Ingredient(name="Beef Tenderloin", category="Meat", stock_level=15.0, unit="kg", reorder_point=5.0, cost_per_unit=Decimal('12.00')),
-        "pork": Ingredient(name="Pork Belly", category="Meat", stock_level=15.0, unit="kg", reorder_point=5.0, cost_per_unit=Decimal('9.50')),
-        "eggs": Ingredient(name="Fresh Eggs", category="Dairy", stock_level=120.0, unit="pcs", reorder_point=30.0, cost_per_unit=Decimal('0.20')),
-        "potatoes": Ingredient(name="Potatoes", category="Pastries", stock_level=25.0, unit="kg", reorder_point=8.0, cost_per_unit=Decimal('1.50')),
-        "oil": Ingredient(name="Cooking Oil", category="Dairy", stock_level=20.0, unit="L", reorder_point=5.0, cost_per_unit=Decimal('3.00')),
-        "chili": Ingredient(name="Chili Flakes", category="Sweeteners", stock_level=2.0, unit="kg", reorder_point=0.5, cost_per_unit=Decimal('5.00')),
-        "soysauce": Ingredient(name="Soy Sauce", category="Syrups", stock_level=5.0, unit="L", reorder_point=1.5, cost_per_unit=Decimal('4.00'))
+        "beans": Ingredient(name="Espresso Roast Beans", category="Coffee Beans", stock_level=22.5, unit="kg", reorder_point=8.0, cost_per_unit=Decimal('850.00'), lifespan_days=60),
+        "milk": Ingredient(name="Whole Milk", category="Dairy", stock_level=32.0, unit="L", reorder_point=12.0, cost_per_unit=Decimal('95.00'), lifespan_days=7),
+        "oatmilk": Ingredient(name="Oat Milk", category="Dairy", stock_level=18.0, unit="L", reorder_point=5.0, cost_per_unit=Decimal('160.00'), lifespan_days=14),
+        "sugar": Ingredient(name="White Sugar", category="Sweeteners", stock_level=12.0, unit="kg", reorder_point=4.0, cost_per_unit=Decimal('85.00'), lifespan_days=365),
+        "vanilla": Ingredient(name="Vanilla Syrup", category="Syrups", stock_level=4.5, unit="L", reorder_point=2.0, cost_per_unit=Decimal('380.00'), lifespan_days=90),
+        "caramel": Ingredient(name="Caramel Sauce", category="Syrups", stock_level=3.5, unit="L", reorder_point=2.0, cost_per_unit=Decimal('420.00'), lifespan_days=60),
+        "cups": Ingredient(name="12oz To-Go Cups", category="Packaging", stock_level=450.0, unit="pcs", reorder_point=150.0, cost_per_unit=Decimal('8.00'), lifespan_days=365),
+        "straws": Ingredient(name="Paper Straws", category="Packaging", stock_level=180.0, unit="pcs", reorder_point=100.0, cost_per_unit=Decimal('2.00'), lifespan_days=365),
+        "croissant": Ingredient(name="Butter Croissants (Frozen)", category="Pastries", stock_level=35.0, unit="pcs", reorder_point=10.0, cost_per_unit=Decimal('45.00'), lifespan_days=30),
+        "choc_croissant": Ingredient(name="Chocolate Croissants (Frozen)", category="Pastries", stock_level=22.0, unit="pcs", reorder_point=8.0, cost_per_unit=Decimal('55.00'), lifespan_days=30),
+        "ice": Ingredient(name="Ice Cubes", category="Sweeteners", stock_level=50.0, unit="kg", reorder_point=10.0, cost_per_unit=Decimal('20.00'), lifespan_days=1),
+        "beer": Ingredient(name="Heineken Beer Bottle", category="Beverages", stock_level=48.0, unit="pcs", reorder_point=12.0, cost_per_unit=Decimal('75.00'), lifespan_days=180),
+        "wine": Ingredient(name="Red Wine Bottle", category="Beverages", stock_level=12.0, unit="pcs", reorder_point=3.0, cost_per_unit=Decimal('650.00'), lifespan_days=365),
+        "rice": Ingredient(name="Jasmine Rice", category="Grains", stock_level=40.0, unit="kg", reorder_point=10.0, cost_per_unit=Decimal('65.00'), lifespan_days=180),
+        "beef": Ingredient(name="Beef Tenderloin", category="Meat", stock_level=15.0, unit="kg", reorder_point=5.0, cost_per_unit=Decimal('680.00'), lifespan_days=5),
+        "pork": Ingredient(name="Pork Belly", category="Meat", stock_level=15.0, unit="kg", reorder_point=5.0, cost_per_unit=Decimal('380.00'), lifespan_days=5),
+        "eggs": Ingredient(name="Fresh Eggs", category="Dairy", stock_level=120.0, unit="pcs", reorder_point=30.0, cost_per_unit=Decimal('10.00'), lifespan_days=21),
+        "potatoes": Ingredient(name="Potatoes", category="Pastries", stock_level=25.0, unit="kg", reorder_point=8.0, cost_per_unit=Decimal('70.00'), lifespan_days=30),
+        "oil": Ingredient(name="Cooking Oil", category="Dairy", stock_level=20.0, unit="L", reorder_point=5.0, cost_per_unit=Decimal('130.00'), lifespan_days=180),
+        "chili": Ingredient(name="Chili Flakes", category="Sweeteners", stock_level=2.0, unit="kg", reorder_point=0.5, cost_per_unit=Decimal('220.00'), lifespan_days=365),
+        "soysauce": Ingredient(name="Soy Sauce", category="Syrups", stock_level=5.0, unit="L", reorder_point=1.5, cost_per_unit=Decimal('85.00'), lifespan_days=365)
     }
     
     for ing in ing_map.values():
@@ -67,56 +72,62 @@ def seed_database():
     # Categories: Coffee, iced coffee, food and snacks, alcoholic drinks, platter, rice bowl, rice meals
     items_data = [
         # Coffee
-        {"name": "Double Espresso", "category": "Coffee", "price": Decimal('3.20'), "image_url": "https://images.unsplash.com/photo-1521302080334-4bebac2763a6?w=800&auto=format&fit=crop&q=80",
+        {"name": "Double Espresso", "category": "Coffee", "price": Decimal('120.00'), "image_url": "https://images.unsplash.com/photo-1521302080334-4bebac2763a6?w=800&auto=format&fit=crop&q=80",
          "recipe": [("beans", 0.018, False), ("cups", 1.0, False)]},
-        {"name": "Caffè Americano", "category": "Coffee", "price": "3.50", "image_url": "https://images.unsplash.com/photo-1551030173-122aabc4489c?w=800&auto=format&fit=crop&q=80",
+        {"name": "Caffè Americano", "category": "Coffee", "price": "130.00", "image_url": "https://images.unsplash.com/photo-1551030173-122aabc4489c?w=800&auto=format&fit=crop&q=80",
          "recipe": [("beans", 0.018, False), ("cups", 1.0, False)]},
-        {"name": "Classic Latte", "category": "Coffee", "price": "4.50", "image_url": "https://images.unsplash.com/photo-1541167760496-1628856ab772?w=800&auto=format&fit=crop&q=80",
+        {"name": "Classic Latte", "category": "Coffee", "price": "170.00", "image_url": "https://images.unsplash.com/photo-1541167760496-1628856ab772?w=800&auto=format&fit=crop&q=80",
          "recipe": [("beans", 0.018, False), ("milk", 0.20, True), ("sugar", 0.01, True), ("cups", 1.0, False), ("straws", 1.0, False)]},
-        {"name": "Vanilla Latte", "category": "Coffee", "price": "5.20", "image_url": "https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=800&auto=format&fit=crop&q=80",
+        {"name": "Vanilla Latte", "category": "Coffee", "price": "190.00", "image_url": "https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=800&auto=format&fit=crop&q=80",
          "recipe": [("beans", 0.018, False), ("milk", 0.20, True), ("vanilla", 0.02, True), ("cups", 1.0, False), ("straws", 1.0, False)]},
-        {"name": "Cold Brew", "category": "Coffee", "price": "4.20", "image_url": "https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=800&auto=format&fit=crop&q=80",
+        {"name": "Cold Brew", "category": "Coffee", "price": "160.00", "image_url": "https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=800&auto=format&fit=crop&q=80",
          "recipe": [("beans", 0.020, False), ("cups", 1.0, False), ("straws", 1.0, False)]},
 
         # Iced Coffee
-        {"name": "Iced Caramel Macchiato", "category": "iced coffee", "price": "5.50", "image_url": "https://images.unsplash.com/photo-1485808191679-5f86510681a2?w=800&auto=format&fit=crop&q=80",
+        {"name": "Iced Caramel Macchiato", "category": "iced coffee", "price": "200.00", "image_url": "https://images.unsplash.com/photo-1485808191679-5f86510681a2?w=800&auto=format&fit=crop&q=80",
          "recipe": [("beans", 0.018, False), ("milk", 0.15, True), ("caramel", 0.02, True), ("ice", 0.1, True), ("cups", 1.0, False), ("straws", 1.0, False)]},
-        {"name": "Iced Matcha Latte", "category": "iced coffee", "price": "5.00", "image_url": "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
+        {"name": "Iced Matcha Latte", "category": "iced coffee", "price": "185.00", "image_url": "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
          "recipe": [("oatmilk", 0.20, True), ("ice", 0.1, True), ("cups", 1.0, False), ("straws", 1.0, False)]},
 
         # Food and snacks
-        {"name": "Butter Croissant", "category": "food and snacks", "price": "3.80", "image_url": "https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=800&auto=format&fit=crop&q=80",
+        {"name": "Butter Croissant", "category": "food and snacks", "price": "95.00", "image_url": "https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=800&auto=format&fit=crop&q=80",
          "recipe": [("croissant", 1.0, False)]},
-        {"name": "Chocolate Pastry", "category": "food and snacks", "price": "4.20", "image_url": "https://images.unsplash.com/photo-1608198093002-ad4e005484ec?w=800&auto=format&fit=crop&q=80",
+        {"name": "Chocolate Pastry", "category": "food and snacks", "price": "110.00", "image_url": "https://images.unsplash.com/photo-1608198093002-ad4e005484ec?w=800&auto=format&fit=crop&q=80",
          "recipe": [("choc_croissant", 1.0, False)]},
 
         # Alcoholic drinks
-        {"name": "Cold Beer Heineken", "category": "alcoholic drinks", "price": "4.50", "image_url": "https://images.unsplash.com/photo-1608270586620-248524c67de9?w=800&auto=format&fit=crop&q=80",
+        {"name": "Cold Beer Heineken", "category": "alcoholic drinks", "price": "130.00", "image_url": "https://images.unsplash.com/photo-1608270586620-248524c67de9?w=800&auto=format&fit=crop&q=80",
          "recipe": [("beer", 1.0, False)]},
-        {"name": "Red Wine Glass", "category": "alcoholic drinks", "price": "6.50", "image_url": "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=800&auto=format&fit=crop&q=80",
+        {"name": "Red Wine Glass", "category": "alcoholic drinks", "price": "250.00", "image_url": "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=800&auto=format&fit=crop&q=80",
          "recipe": [("wine", 0.2, False)]},
 
         # Platter
-        {"name": "French Fries Platter", "category": "platter", "price": "5.50", "image_url": "https://images.unsplash.com/photo-1576107232684-1279f390859f?w=800&auto=format&fit=crop&q=80",
+        {"name": "French Fries Platter", "category": "platter", "price": "160.00", "image_url": "https://images.unsplash.com/photo-1576107232684-1279f390859f?w=800&auto=format&fit=crop&q=80",
          "recipe": [("potatoes", 0.25, False), ("oil", 0.05, False), ("chili", 0.005, True)]},
 
         # Rice bowl
-        {"name": "Spicy Beef Rice Bowl", "category": "rice bowl", "price": "7.50", "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&auto=format&fit=crop&q=80",
+        {"name": "Spicy Beef Rice Bowl", "category": "rice bowl", "price": "249.00", "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&auto=format&fit=crop&q=80",
          "recipe": [("rice", 0.15, False), ("beef", 0.12, False), ("eggs", 1.0, True), ("chili", 0.005, True)]},
 
         # Rice meals
-        {"name": "Pork Belly Rice Meal", "category": "rice meals", "price": "8.00", "image_url": "https://images.unsplash.com/photo-1606787366850-de6330128bfc?w=800&auto=format&fit=crop&q=80",
+        {"name": "Pork Belly Rice Meal", "category": "rice meals", "price": "269.00", "image_url": "https://images.unsplash.com/photo-1606787366850-de6330128bfc?w=800&auto=format&fit=crop&q=80",
          "recipe": [("rice", 0.15, False), ("pork", 0.15, False), ("eggs", 1.0, True), ("soysauce", 0.02, True)]}
     ]
 
     menu_items = []
     for item_info in items_data:
+        sizeable = is_sizeable_category(item_info["category"])
+        base_price = Decimal(str(item_info["price"]))
         item = MenuItem(
             name=item_info["name"],
             category=item_info["category"],
-            price=Decimal(str(item_info["price"])),
+            price=base_price,
+            price_small=(base_price - Decimal('15.00')) if sizeable else None,
+            price_medium=base_price if sizeable else None,
+            price_large=(base_price + Decimal('20.00')) if sizeable else None,
             is_available=True,
-            image_url=item_info["image_url"]
+            image_url=item_info["image_url"],
+            offered_sizes=json.dumps(list(SIZE_LEVELS) if sizeable else []),
         )
         db.session.add(item)
         db.session.flush() # Populate ID
@@ -124,12 +135,17 @@ def seed_database():
         # Seed Recipe Ingredients
         for ing_key, qty, customizable in item_info["recipe"]:
             ing = ing_map[ing_key]
-            recipe_item = MenuItemIngredient(
-                menu_item_id=item.id,
-                ingredient_id=ing.id,
-                default_quantity=qty,
-                is_customizable=customizable
-            )
+            recipe_kwargs = {
+                'menu_item_id': item.id,
+                'ingredient_id': ing.id,
+                'default_quantity': qty,
+                'is_customizable': customizable,
+            }
+            if sizeable:
+                recipe_kwargs['qty_small'] = qty * 0.75
+                recipe_kwargs['qty_medium'] = qty
+                recipe_kwargs['qty_large'] = qty * 1.25
+            recipe_item = MenuItemIngredient(**recipe_kwargs)
             db.session.add(recipe_item)
         
         menu_items.append(item)
@@ -140,8 +156,8 @@ def seed_database():
     requests_data = [
         IngredientRequest(ingredient_id=ing_map["beans"].id, staff_name="John Doe", quantity=5.0, status="approved", requested_at=datetime.utcnow() - timedelta(days=2), notes="For main bar espresso hopper"),
         IngredientRequest(ingredient_id=ing_map["milk"].id, staff_name="Jane Smith", quantity=12.0, status="approved", requested_at=datetime.utcnow() - timedelta(days=1), notes="Weekend dairy restocking"),
-        IngredientRequest(ingredient_id=ing_map["oatmilk"].id, staff_name="John Doe", quantity=4.0, status="pending", requested_at=datetime.utcnow() - timedelta(hours=4), notes="Oat milk running low at coffee bar 2"),
-        IngredientRequest(ingredient_id=ing_map["caramel"].id, staff_name="Jane Smith", quantity=2.0, status="pending", requested_at=datetime.utcnow() - timedelta(hours=2), notes="Urgent! We are out of caramel drizzle sauce"),
+        IngredientRequest(ingredient_id=ing_map["oatmilk"].id, staff_name="John Doe", quantity=4.0, status="approved", requested_at=datetime.utcnow() - timedelta(hours=4), notes="Oat milk running low at coffee bar 2"),
+        IngredientRequest(ingredient_id=ing_map["caramel"].id, staff_name="Jane Smith", quantity=2.0, status="approved", requested_at=datetime.utcnow() - timedelta(hours=2), notes="Urgent! We are out of caramel drizzle sauce"),
         IngredientRequest(ingredient_id=ing_map["straws"].id, staff_name="John Doe", quantity=200.0, status="rejected", requested_at=datetime.utcnow() - timedelta(days=3), notes="Weekly stock check found error in request form")
     ]
     db.session.add_all(requests_data)
@@ -150,11 +166,11 @@ def seed_database():
     # 5. Seed Stock In Logs (Record Stock In)
     now = datetime.utcnow()
     stock_ins = [
-        StockInLog(ingredient_id=ing_map["beans"].id, quantity=20.0, cost=Decimal('370.00'), supplier="Columbia Coffee Importers", invoice_number="INV-2026-001", received_at=now - timedelta(days=6)),
-        StockInLog(ingredient_id=ing_map["milk"].id, quantity=40.0, cost=Decimal('88.00'), supplier="Valley View Farms", invoice_number="INV-5541A", received_at=now - timedelta(days=5)),
-        StockInLog(ingredient_id=ing_map["cups"].id, quantity=500.0, cost=Decimal('75.00'), supplier="EcoPack Distributors", invoice_number="INV-9988", received_at=now - timedelta(days=4)),
-        StockInLog(ingredient_id=ing_map["sugar"].id, quantity=10.0, cost=Decimal('28.00'), supplier="Global Grocery Corp", invoice_number="INV-2019", received_at=now - timedelta(days=3)),
-        StockInLog(ingredient_id=ing_map["croissant"].id, quantity=50.0, cost=Decimal('90.00'), supplier="Le Gourmet Bakery", invoice_number="LGB-8871", received_at=now - timedelta(days=1))
+        StockInLog(ingredient_id=ing_map["beans"].id, quantity=20.0, cost=Decimal('17000.00'), supplier="Columbia Coffee Importers", invoice_number="INV-2026-001", received_at=now - timedelta(days=6)),
+        StockInLog(ingredient_id=ing_map["milk"].id, quantity=40.0, cost=Decimal('3800.00'), supplier="Valley View Farms", invoice_number="INV-5541A", received_at=now - timedelta(days=5)),
+        StockInLog(ingredient_id=ing_map["cups"].id, quantity=500.0, cost=Decimal('4000.00'), supplier="EcoPack Distributors", invoice_number="INV-9988", received_at=now - timedelta(days=4)),
+        StockInLog(ingredient_id=ing_map["sugar"].id, quantity=10.0, cost=Decimal('850.00'), supplier="Global Grocery Corp", invoice_number="INV-2019", received_at=now - timedelta(days=3)),
+        StockInLog(ingredient_id=ing_map["croissant"].id, quantity=50.0, cost=Decimal('2250.00'), supplier="Le Gourmet Bakery", invoice_number="LGB-8871", received_at=now - timedelta(days=1))
     ]
     db.session.add_all(stock_ins)
     db.session.commit()

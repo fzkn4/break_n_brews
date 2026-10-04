@@ -30,10 +30,11 @@ export default function ProductCard({ item, availability, isFavorite, onOpen, on
           className="product-card__fav"
           onClick={() => onToggleFavorite(item.id)}
           aria-pressed={isFavorite}
-          aria-label={isFavorite ? `Remove ${item.name} from favourites` : `Save ${item.name} to favourites`}
+          aria-label={isFavorite ? `Remove ${item.name} from Favorites` : `Save ${item.name} to Favorites`}
         >
           <Heart size={17} fill={isFavorite ? 'currentColor' : 'none'} />
         </button>
+
       </div>
 
       <div className="product-card__body">

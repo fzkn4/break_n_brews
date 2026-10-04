@@ -6,14 +6,14 @@ import {
   ClipboardList, 
   PlusCircle, 
   BarChart3,
-  MessageSquare
+  MessageSquare,
+  QrCode
 } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   lowStockCount: number;
-  pendingRequestsCount: number;
   pendingReviewsCount: number;
 }
 
@@ -21,17 +21,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeTab, 
   setActiveTab, 
   lowStockCount, 
-  pendingRequestsCount,
   pendingReviewsCount
 }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'ingredients', label: 'Manage Ingredients', icon: ChefHat, badge: lowStockCount, badgeColor: 'bg-red' },
     { id: 'menu', label: 'Manage Menu', icon: Coffee },
-    { id: 'requests', label: 'Manage Requests', icon: ClipboardList, badge: pendingRequestsCount, badgeColor: 'bg-blue' },
+    { id: 'tables', label: 'Table QR Codes', icon: QrCode },
+    { id: 'requests', label: 'Manage Customer Requests', icon: ClipboardList },
     { id: 'stockin', label: 'Record Stock In', icon: PlusCircle },
     { id: 'reviews', label: 'Reviews', icon: MessageSquare, badge: pendingReviewsCount, badgeColor: 'bg-blue' },
-    { id: 'reports', label: 'View Reports', icon: BarChart3 }
+    { id: 'reports', label: 'View Report/Inventory', icon: BarChart3 }
   ];
 
   return (
@@ -56,11 +56,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`sidebar-nav-btn ${isActive ? 'active' : ''}`}
+              className={`group flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-200 ease-in-out hover:translate-x-2 hover:bg-amber-500/10 hover:text-amber-500 active:scale-95 sidebar-nav-btn ${isActive ? 'active border-l-4 border-amber-500' : ''}`}
             >
               <div className="btn-content">
-                <Icon size={20} className="nav-icon" />
-                <span className="btn-label">
+                <Icon size={20} className="nav-icon group-hover:text-amber-500" />
+                <span className="btn-label group-hover:text-amber-500 font-medium">
                   {item.label}
                 </span>
               </div>
@@ -87,7 +87,8 @@ const styles = {
     display: 'flex',
     flexDirection: 'column' as const,
     padding: '24px 16px',
-    boxSizing: 'border-box' as const
+    boxSizing: 'border-box' as const,
+    backgroundColor: '#393E46'
   },
   logoContainer: {
     display: 'flex',
