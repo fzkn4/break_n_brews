@@ -19,6 +19,7 @@ import {
   cartLineId,
   defaultProductSize,
   getItemPrice,
+  isCustomizationLevel,
   offeredSizesOf,
   reservedByCart,
   stockMapFrom
@@ -451,10 +452,7 @@ function App() {
       }
       const levels: Record<number, CustomizationLevel> = {};
       for (const custom of orderItem.customizations) {
-        const level = custom.level;
-        if (level === 'Less' || level === 'Regular' || level === 'Extra') {
-          levels[custom.ingredient_id] = level;
-        }
+        if (isCustomizationLevel(custom.level)) levels[custom.ingredient_id] = custom.level;
       }
       const offered = offeredSizesOf(item);
       const stored = orderItem.size as ProductSize | undefined;
@@ -463,7 +461,7 @@ function App() {
         id: cartLineId(item.id, levels, size),
         menuItemId: item.id,
         name: item.name,
-        price: item.price,
+        price: getItemPrice(item, size),
         quantity: orderItem.quantity,
         size,
         customizations: orderItem.customizations
