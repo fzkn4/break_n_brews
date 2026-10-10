@@ -1566,6 +1566,133 @@ img { display: block; max-width: 100%; }
 .chip:disabled { opacity: 0.4; }
 .chip--grow { flex: 1; text-align: center; }
 
+.dialog__title { font-size: 1.55rem; margin-top: 4px; }
+.dialog__lede { color: var(--text-muted); font-size: 0.9rem; margin-top: 6px; }
+.dialog__summary {
+  margin-bottom: 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Size cards: cup icon grows with the size, price under each */
+.size-grid { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; }
+.size-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 8px 12px;
+  border-radius: var(--radius-md, 14px);
+  border: 1.5px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  transition: all 0.2s var(--ease);
+}
+.size-card:hover { border-color: var(--accent-amber); color: var(--accent-primary); }
+.size-card.is-active {
+  border-color: var(--accent-primary);
+  background: var(--accent-softer);
+  color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.size-card__icon { height: 30px; display: flex; align-items: flex-end; }
+.size-card__name { font-weight: 700; font-size: 0.9rem; }
+.size-card__price { font-size: 0.78rem; color: var(--text-muted); }
+.size-card.is-active .size-card__price { color: var(--accent-amber); font-weight: 600; }
+
+/* Ingredient customizer */
+.customizer { display: flex; flex-direction: column; gap: 12px; }
+.customizer__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.customizer__head .btn { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.customizer__title {
+  font-family: var(--font-body);
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+.customizer__sub { margin-top: 4px; font-size: 0.78rem; color: var(--text-muted); }
+.customizer__note { font-size: 0.78rem; color: var(--text-muted); }
+
+.ingredient-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-md, 14px);
+  border: 1px solid var(--border);
+  background: var(--bg-band);
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+.ingredient-row.is-changed { border-color: var(--accent-amber); background: var(--accent-softer); }
+.ingredient-row__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ingredient-row__name { font-weight: 700; font-size: 0.92rem; color: var(--text-primary); }
+.ingredient-row__amount {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent-amber);
+  white-space: nowrap;
+  animation: fade-in 0.3s var(--ease);
+}
+
+.level-meter { height: 4px; border-radius: var(--radius-pill); background: var(--border); overflow: hidden; }
+.level-meter__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-amber), var(--accent-primary));
+  transition: width 0.3s var(--ease);
+}
+
+.level-seg {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+}
+.level-seg__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 7px 4px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  transition: all 0.2s var(--ease);
+  min-width: 0;
+}
+.level-seg__btn:hover:not(:disabled) { color: var(--accent-primary); background: var(--accent-softer); }
+.level-seg__btn.is-active {
+  background: var(--accent-primary);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(74, 46, 27, 0.25);
+}
+.level-seg__btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.level-seg__label { font-size: 0.8rem; font-weight: 700; }
+.level-seg__amount { font-size: 0.66rem; opacity: 0.8; margin-top: 1px; white-space: nowrap; }
+
+.customizer__fixed { display: flex; flex-direction: column; gap: 8px; }
+.customizer__fixed-label { font-size: 0.74rem; font-weight: 600; color: var(--text-muted); }
+.customizer__fixed-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag {
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-band);
+  border: 1px solid var(--border);
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+
 .stepper {
   display: inline-flex;
   align-items: center;
@@ -1890,6 +2017,9 @@ img { display: block; max-width: 100%; }
 }
 
 @media (max-width: 520px) {
+  .ingredient-row { padding: 12px; }
+  .level-seg__amount { display: none; }
+  .level-seg__btn { padding: 9px 2px; }
   .site-footer__grid { grid-template-columns: 1fr; }
   .product-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr)); gap: 14px; }
   .product-card__body { padding: 14px; gap: 4px; }

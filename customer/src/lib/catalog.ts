@@ -19,17 +19,15 @@ export const API_URL =
   `http://${typeof window === 'undefined' ? 'localhost' : window.location.hostname}:5001/api`;
 
 /** Kept in sync with LEVEL_MULTIPLIERS in backend/models.py. */
-export const CUSTOMIZATION_LEVELS: CustomizationLevel[] = ['Less', 'Regular', 'Extra'];
+export const CUSTOMIZATION_LEVELS: CustomizationLevel[] = ['None', 'Less', 'Regular', 'Extra'];
+
+export function isCustomizationLevel(value: unknown): value is CustomizationLevel {
+  return CUSTOMIZATION_LEVELS.includes(value as CustomizationLevel);
+}
 
 export const PRODUCT_SIZES: ProductSize[] = ['Small', 'Regular', 'Large'];
 
 export const LEVEL_MULTIPLIER: Record<CustomizationLevel, number> = {
-  Less: 0.5,
-  Regular: 1.0,
-  Extra: 1.5
-};
-
-const LEGACY_LEVEL_MULTIPLIER: Record<string, number> = {
   None: 0.0,
   Less: 0.5,
   Regular: 1.0,
@@ -102,7 +100,7 @@ export function formatRecipeAmount(qty: number, unit: string): string {
 }
 
 function levelMultiplier(level: string): number {
-  return LEGACY_LEVEL_MULTIPLIER[level] ?? LEVEL_MULTIPLIER[level as CustomizationLevel] ?? 1.0;
+  return LEVEL_MULTIPLIER[level as CustomizationLevel] ?? 1.0;
 }
 
 /** All portals render money as Philippine peso, e.g. `₱0.00`. */
@@ -203,9 +201,7 @@ export function reservedByCart(cart: CartItem[], menuById: Map<number, MenuItem>
     if (!item) continue;
     const levels: Record<number, CustomizationLevel> = {};
     for (const custom of line.customizations) {
-      if (custom.level === 'Less' || custom.level === 'Regular' || custom.level === 'Extra') {
-        levels[custom.ingredient_id] = custom.level;
-      }
+      if (isCustomizationLevel(custom.level)) levels[custom.ingredient_id] = custom.level;
     }
     const size = line.size ?? 'Regular';
     for (const [id, perServing] of requirementsFor(item, levels, size)) {
@@ -282,7 +278,7 @@ export function cartCount(cart: CartItem[]): number {
 export function summariseCustomizations(customs: { name: string; level: string }[]): string {
   const notable = customs.filter((c) => c.level !== 'Regular');
   if (notable.length === 0) return 'Standard recipe';
-  return notable.map((c) => `${c.level} ${c.name}`).join(' · ');
+  return notable.map((c) => (c.level === 'None' ? `No ${c.name}` : `${c.level} ${c.name}`)).join(' · ');
 }
 
 export function summariseOrderLine(

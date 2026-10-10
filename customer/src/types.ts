@@ -44,7 +44,7 @@ export interface Ingredient {
 
 export type OrderStatus = 'pending' | 'preparing' | 'completed' | 'cancelled';
 
-export type CustomizationLevel = 'Less' | 'Regular' | 'Extra';
+export type CustomizationLevel = 'None' | 'Less' | 'Regular' | 'Extra';
 export type ProductSize = 'Small' | 'Regular' | 'Large';
 
 export interface OrderItemCustomization {
