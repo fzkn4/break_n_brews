@@ -3,7 +3,7 @@ import random
 from datetime import datetime, timedelta
 from decimal import Decimal
 from models import (
-    db, Staff, Ingredient, MenuItem, MenuItemIngredient, IngredientRequest, StockInLog, Order, OrderItem,
+    db, Staff, Ingredient, MenuItem, MenuItemIngredient, IngredientRequest, StockInLog, StockBatch, Order, OrderItem,
     Transaction, Review, Subscriber, is_sizeable_category, SIZE_LEVELS,
 )
 
@@ -253,6 +253,38 @@ def seed_database():
         if ing.name in initial_stocks:
             ing.stock_level = initial_stocks[ing.name]
 
+    db.session.commit()
+
+    # 7. Seed stock batches so the use-first queue has a realistic mix: each ingredient holds an older
+    #    batch (part-way through its shelf life) and a fresh one. Their remaining quantities add up to
+    #    stock_level. Whole Milk also has a small expired lot waiting to be discarded.
+    from batches import _code_prefix, store_today
+    today = store_today()
+    receivers = ["Jane Smith", "John Doe", "Admin User"]
+    for i, ing in enumerate(Ingredient.query.order_by(Ingredient.id).all()):
+        life = max(1, ing.lifespan_days or 30)
+        older_age = max(1, round(life * 0.7))
+        older_qty = round(ing.stock_level * 0.4, 3)
+        lots = [
+            (older_qty, now - timedelta(days=older_age), today + timedelta(days=life - older_age)),
+            (round(ing.stock_level - older_qty, 3), now - timedelta(days=1), today + timedelta(days=life - 1)),
+        ]
+        if ing.name == "Whole Milk":
+            lots.insert(0, (2.0, now - timedelta(days=9), today - timedelta(days=2)))
+            ing.stock_level += 2.0
+        for n, (qty, received_at, expiry) in enumerate(lots, start=1):
+            if qty <= 0:
+                continue
+            db.session.add(StockBatch(
+                ingredient=ing,
+                batch_code=f"{_code_prefix(ing.name)}-{received_at:%y%m%d}-{n:02d}",
+                quantity_received=qty,
+                quantity_remaining=qty,
+                expiry_date=expiry,
+                source="stock_in",
+                received_by=receivers[i % len(receivers)],
+                received_at=received_at,
+            ))
     db.session.commit()
 
     # 8. Seed published reviews so the customer home page has a wall to show on a fresh install.

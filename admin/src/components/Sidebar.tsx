@@ -16,13 +16,16 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   lowStockCount: number;
   pendingReviewsCount: number;
+  /** Batches expired or expiring within 2 days. */
+  expiringBatchCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
   activeTab, 
   setActiveTab, 
   lowStockCount, 
-  pendingReviewsCount
+  pendingReviewsCount,
+  expiringBatchCount = 0
 }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -30,7 +33,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'menu', label: 'Manage Menu', icon: Coffee },
     { id: 'tables', label: 'Table QR Codes', icon: QrCode },
     { id: 'requests', label: 'Manage Customer Requests', icon: ClipboardList },
-    { id: 'stockin', label: 'Record Stock In', icon: PlusCircle },
+    { id: 'stockin', label: 'Stock In & Expiry', icon: PlusCircle, badge: expiringBatchCount, badgeColor: 'bg-amber' },
     { id: 'reviews', label: 'Reviews', icon: MessageSquare, badge: pendingReviewsCount, badgeColor: 'bg-blue' },
     { id: 'reports', label: 'View Report/Inventory', icon: BarChart3 },
     { id: 'notifications', label: 'Email Notifications', icon: Mail }
@@ -69,7 +72,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {item.badge !== undefined && item.badge > 0 && (
                 <span style={{
                   ...styles.badge,
-                  backgroundColor: item.badgeColor === 'bg-blue' ? '#3b82f6' : '#ef4444'
+                  backgroundColor: item.badgeColor === 'bg-blue' ? '#3b82f6' : item.badgeColor === 'bg-amber' ? '#f97316' : '#ef4444'
                 }}>
                   {item.badge}
                 </span>

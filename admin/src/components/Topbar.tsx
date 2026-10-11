@@ -39,7 +39,7 @@ export const Topbar: React.FC<TopbarProps> = ({
       case 'ingredients': return 'Manage Ingredients';
       case 'menu': return 'Manage Cafe Menu';
       case 'requests': return 'Manage Customer Requests';
-      case 'stockin': return 'Record Stock In';
+      case 'stockin': return 'Stock In & Expiry';
       case 'reviews': return 'Reviews & Subscribers';
       case 'reports': return 'View Report/Inventory';
       case 'tables': return 'Table QR Codes';

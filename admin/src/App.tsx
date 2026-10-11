@@ -12,9 +12,10 @@ import { ManageReviews } from './components/ManageReviews';
 import { TableQrCodes } from './components/TableQrCodes';
 import { EmailNotifications } from './components/EmailNotifications';
 import { Login } from './components/Login';
-import type { Ingredient, MenuItem, IngredientRequest, StockInLog, AnalyticsData, ReportData, Review, Subscriber, Order, AnnouncementResult } from './types';
+import type { Ingredient, MenuItem, IngredientRequest, StockInLog, StockBatch, StockInPayload, AnalyticsData, ReportData, Review, Subscriber, Order, AnnouncementResult } from './types';
 import { hydrateAndMergeMenuItems, saveCustomMenuItem, removeCustomMenuItem, getCustomMenuItems, getDeletedMenuItemIds } from './lib/menuStorage';
 import { STORAGE_KEYS, readStore, writeStore } from './lib/storage';
+import { formatQty, urgentBatchCount } from './lib/expiry';
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
@@ -74,6 +75,9 @@ function App() {
   const [stockInLogs, setStockInLogs] = useState<StockInLog[]>(() =>
     readStore<StockInLog[]>(STORAGE_KEYS.stockIn, [])
   );
+  const [batches, setBatches] = useState<StockBatch[]>(() =>
+    readStore<StockBatch[]>(STORAGE_KEYS.batches, [])
+  );
   const [reviews, setReviews] = useState<Review[]>(() =>
     readStore<Review[]>(STORAGE_KEYS.reviews, [])
   );
@@ -98,12 +102,13 @@ function App() {
   // Sync all core database lists
   const syncInventoryData = async (silent = false) => {
     try {
-      const [ingRes, menuRes, reqRes, orderRes, stockRes, reviewRes, subRes, analyticsRes] = await Promise.all([
+      const [ingRes, menuRes, reqRes, orderRes, stockRes, batchRes, reviewRes, subRes, analyticsRes] = await Promise.all([
         fetch(`${API_URL}/ingredients`),
         fetch(`${API_URL}/menu`),
         fetch(`${API_URL}/requests`),
         fetch(`${API_URL}/orders`),
         fetch(`${API_URL}/stockin`),
+        fetch(`${API_URL}/batches`),
         fetch(`${API_URL}/reviews?all=1`),
         fetch(`${API_URL}/subscribers`),
         fetch(`${API_URL}/analytics?days=${analyticsDays}`)
@@ -159,6 +164,11 @@ function App() {
         const data = await stockRes.json();
         setStockInLogs(data);
         writeStore(STORAGE_KEYS.stockIn, data);
+      }
+      if (batchRes.ok) {
+        const data = await batchRes.json();
+        setBatches(data);
+        writeStore(STORAGE_KEYS.batches, data);
       }
       if (reviewRes.ok) {
         const data = await reviewRes.json();
@@ -387,7 +397,7 @@ function App() {
   }; */
 
   // ------------ RECORD STOCK IN HANDLER ------------
-  const handleRecordStockIn = async (data: any) => {
+  const handleRecordStockIn = async (data: StockInPayload): Promise<boolean> => {
     try {
       const res = await fetch(`${API_URL}/stockin`, {
         method: 'POST',
@@ -395,15 +405,59 @@ function App() {
         body: JSON.stringify(data)
       });
       if (res.ok) {
-        showToast('Shipment logged and inventory updated');
-        syncInventoryData();
-      } else {
-        const err = await res.json();
-        showToast(err.error || 'Failed to record shipment', 'error');
+        const log: StockInLog = await res.json();
+        const codes = (log.batches || []).map((b) => b.batch_code).join(', ');
+        showToast(`Received ${formatQty(log.quantity)} ${log.ingredient_unit} of ${log.ingredient_name}${codes ? ` · ${codes}` : ''}`);
+        syncInventoryData(true);
+        return true;
       }
+      const err = await res.json().catch(() => ({}));
+      showToast(err.error || 'Failed to record shipment', 'error');
     } catch (err) {
       showToast('Network error recording shipment', 'error');
     }
+    return false;
+  };
+
+  const handleUpdateBatch = async (id: number, data: { batch_code?: string; expiry_date?: string }): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_URL}/batches/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (res.ok) {
+        showToast('Batch updated. The use-first order was recalculated.');
+        syncInventoryData(true);
+        return true;
+      }
+      const err = await res.json().catch(() => ({}));
+      showToast(err.error || 'Failed to update batch', 'error');
+    } catch (err) {
+      showToast('Network error updating batch', 'error');
+    }
+    return false;
+  };
+
+  const handleDiscardBatch = async (id: number, data: { quantity: number; reason: string; by: string | null }): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_URL}/batches/${id}/discard`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (res.ok) {
+        const batch: StockBatch = await res.json();
+        showToast(`Discarded ${formatQty(data.quantity)} ${batch.ingredient_unit} of ${batch.ingredient_name} (${batch.batch_code})`);
+        syncInventoryData(true);
+        return true;
+      }
+      const err = await res.json().catch(() => ({}));
+      showToast(err.error || 'Failed to discard batch', 'error');
+    } catch (err) {
+      showToast('Network error discarding batch', 'error');
+    }
+    return false;
   };
 
   // ------------ REPORTS FETCH HANDLER ------------
@@ -420,6 +474,7 @@ function App() {
   // Badges calculations for Sidebar nav items
   const lowStockCount = ingredients.filter(i => i.stock_level <= i.reorder_point).length;
   const pendingReviewsCount = reviews.filter(r => !r.is_published).length;
+  const expiringBatchCount = urgentBatchCount(batches);
 
   // ------------ REVIEW HANDLERS ------------
   const handlePublishReview = async (id: number, isPublished: boolean) => {
@@ -504,6 +559,7 @@ function App() {
           }} 
           lowStockCount={lowStockCount}
           pendingReviewsCount={pendingReviewsCount}
+          expiringBatchCount={expiringBatchCount}
         />
       </div>
 
@@ -563,7 +619,11 @@ function App() {
             stockInLogs={stockInLogs}
             ingredients={ingredients}
             requests={requests}
+            batches={batches}
+            currentUserName={currentUser?.name ?? null}
             onRecordStockIn={handleRecordStockIn}
+            onUpdateBatch={handleUpdateBatch}
+            onDiscardBatch={handleDiscardBatch}
           />
         )}
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Package, UtensilsCrossed, FileText, AlertTriangle, LogOut } from 'lucide-react';
+import { LayoutDashboard, Package, UtensilsCrossed, FileText, AlertTriangle, LogOut, CalendarClock } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
@@ -8,6 +8,8 @@ interface SidebarProps {
   pendingOrdersCount: number;
   pendingRequestsCount?: number;
   lowStockCount?: number;
+  /** Batches expired or expiring within 2 days. */
+  expiringBatchCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -17,12 +19,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   pendingOrdersCount,
   pendingRequestsCount = 0,
   lowStockCount = 0,
+  expiringBatchCount = 0,
 }) => {
   const menuItems = [
     { id: 'dashboard', label: 'DASHBOARD', icon: LayoutDashboard },
     { id: 'orders', label: 'ORDER QUEUE', icon: Package, badge: pendingOrdersCount },
     { id: 'menu', label: 'MENU', icon: UtensilsCrossed },
     { id: 'requests', label: 'INGREDIENTS SUPPLY REQUEST', icon: FileText, badge: pendingRequestsCount },
+    { id: 'stock', label: 'STOCK IN & EXPIRY', icon: CalendarClock, badge: expiringBatchCount, badgeColor: '#f97316' },
     { id: 'alerts', label: 'INVENTORY ALERT', icon: AlertTriangle, badge: lowStockCount, badgeColor: '#ef4444' },
   ];
 

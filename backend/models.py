@@ -1,7 +1,7 @@
 import json
 import secrets
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, date
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from sqlalchemy import inspect, text
@@ -303,6 +303,7 @@ class Ingredient(db.Model):
     # Relationships
     requests = db.relationship('IngredientRequest', backref='ingredient', lazy=True, cascade="all, delete-orphan")
     stock_ins = db.relationship('StockInLog', backref='ingredient', lazy=True, cascade="all, delete-orphan")
+    batches = db.relationship('StockBatch', backref='ingredient', lazy=True, cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -428,7 +429,10 @@ class StockInLog(db.Model):
     cost = db.Column(db.Numeric(10, 2), nullable=False)
     supplier = db.Column(db.String(100), nullable=False)
     invoice_number = db.Column(db.String(100), nullable=True)
+    received_by = db.Column(db.String(100), nullable=True)
     received_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    batches = db.relationship('StockBatch', backref='stock_in', lazy=True)
 
     def to_dict(self):
         return {
@@ -440,7 +444,89 @@ class StockInLog(db.Model):
             'cost': float(self.cost),
             'supplier': self.supplier,
             'invoice_number': self.invoice_number,
-            'received_at': self.received_at.isoformat()
+            'received_by': self.received_by,
+            'received_at': self.received_at.isoformat(),
+            'batches': [
+                {'id': b.id, 'batch_code': b.batch_code, 'quantity': b.quantity_received,
+                 'expiry_date': b.expiry_date.isoformat() if b.expiry_date else None}
+                for b in sorted(self.batches, key=lambda b: (b.expiry_date or date.max, b.id))
+            ],
+        }
+
+
+# Days-left thresholds for the expiry badges shown in the admin and staff portals.
+EXPIRY_CRITICAL_DAYS = 2
+EXPIRY_SOON_DAYS = 7
+
+
+def expiry_status(expiry_date, today):
+    if expiry_date is None:
+        return 'unknown', None
+    days_left = (expiry_date - today).days
+    if days_left < 0:
+        return 'expired', days_left
+    if days_left <= EXPIRY_CRITICAL_DAYS:
+        return 'critical', days_left
+    if days_left <= EXPIRY_SOON_DAYS:
+        return 'soon', days_left
+    return 'ok', days_left
+
+
+class StockBatch(db.Model):
+    """One delivered lot of an ingredient, with its own expiry date.
+
+    Ingredient.stock_level stays the total; the active batches' quantity_remaining always add up to it.
+    Stock is drawn first-expired-first-out (see batches.py).
+    """
+    __tablename__ = 'stock_batches'
+    id = db.Column(db.Integer, primary_key=True)
+    ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredients.id', ondelete='CASCADE'), nullable=False, index=True)
+    stock_in_id = db.Column(db.Integer, db.ForeignKey('stock_in_logs.id', ondelete='SET NULL'), nullable=True)
+    batch_code = db.Column(db.String(60), nullable=False)
+    quantity_received = db.Column(db.Float, nullable=False)
+    quantity_remaining = db.Column(db.Float, nullable=False)
+    expiry_date = db.Column(db.Date, nullable=True)  # null only for opening stock and manual adjustments
+    source = db.Column(db.String(20), nullable=False, default='stock_in')  # stock_in, opening, adjustment
+    received_by = db.Column(db.String(100), nullable=True)
+    received_at = db.Column(db.DateTime, default=datetime.utcnow)
+    disposed_at = db.Column(db.DateTime, nullable=True)
+    disposed_quantity = db.Column(db.Float, nullable=True)
+    disposed_reason = db.Column(db.String(255), nullable=True)
+    disposed_by = db.Column(db.String(100), nullable=True)
+
+    def to_dict(self, today, rank=None):
+        status, days_left = expiry_status(self.expiry_date, today)
+        if self.disposed_at is not None:
+            state = 'disposed'
+        elif (self.quantity_remaining or 0) <= 1e-9:
+            state = 'depleted'
+        else:
+            state = 'active'
+        ing = self.ingredient
+        return {
+            'id': self.id,
+            'ingredient_id': self.ingredient_id,
+            'ingredient_name': ing.name if ing else None,
+            'ingredient_unit': ing.unit if ing else '',
+            'ingredient_category': ing.category if ing else '',
+            'stock_in_id': self.stock_in_id,
+            'supplier': self.stock_in.supplier if self.stock_in else None,
+            'batch_code': self.batch_code,
+            'quantity_received': round(self.quantity_received, 6),
+            'quantity_remaining': round(self.quantity_remaining, 6),
+            'expiry_date': self.expiry_date.isoformat() if self.expiry_date else None,
+            'days_left': days_left,
+            'expiry_status': status,
+            'state': state,
+            # 1 = the batch the kitchen should open next. Expired and finished batches have no rank.
+            'use_rank': rank,
+            'source': self.source,
+            'received_by': self.received_by,
+            'received_at': self.received_at.isoformat() if self.received_at else None,
+            'disposed_at': self.disposed_at.isoformat() if self.disposed_at else None,
+            'disposed_quantity': self.disposed_quantity,
+            'disposed_reason': self.disposed_reason,
+            'disposed_by': self.disposed_by,
         }
 
 class Order(db.Model):

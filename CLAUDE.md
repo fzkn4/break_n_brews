@@ -77,6 +77,21 @@ makes every menu item a bill of materials over `Ingredient`. Nearly every behavi
   or "Sold out" and cap the quantity stepper. It is a courtesy layer only — the backend still decides, and its 400
   message is shown to the customer verbatim.
 
+### Stock batches and expiry (`backend/batches.py`, `StockBatch` in `models.py`)
+
+- Every stock-in is one or more **batches** (`stock_batches`), each with its own `batch_code` (auto-generated
+  `WM-261011-01` style when blank, unique per ingredient) and a required `expiry_date` that may not be in the past.
+  `POST /api/stockin` takes `batches: [{quantity, batch_code, expiry_date}]`; `cost` is optional (staff) and then
+  valued at the current `cost_per_unit` without changing it.
+- `Ingredient.stock_level` is still the total everyone reads; active batches' `quantity_remaining` always sum to it.
+  **Never assign `stock_level` directly** — use `consume()` / `restore()` / `reconcile()` from `batches.py`, which
+  draw first-expired-first-out: undated batches (opening stock, manual adjustments) first, then soonest expiry,
+  expired batches last. `GET /api/batches` returns `use_rank` (1 = open next; null for expired).
+- `ensure_batch_schema()` gives existing stock an undated `OPEN-…` batch on first start; portals nudge users to add
+  its expiry. `POST /api/batches/<id>/discard` writes off expired/spoiled stock; `PUT /api/batches/<id>` fixes a
+  code or date. Admin "Stock In & Expiry" and the staff tab of the same name share `ReceiveStockForm` and
+  `BatchQueue` (copied per portal, like `types.ts`).
+
 Other stock movements: `POST /api/stockin` adds quantity and recomputes `cost_per_unit` from `cost / quantity`;
 approving an `IngredientRequest` (`PUT /api/requests/<id>`) deducts the requested quantity and un-approving adds it
 back — approval transitions, not creation, are what move stock.
