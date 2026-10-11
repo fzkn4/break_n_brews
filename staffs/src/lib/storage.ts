@@ -8,6 +8,7 @@ export const STORAGE_KEYS = {
   orders: 'bb_staff_orders',
   menuItems: 'bb_staff_menu_items',
   requests: 'bb_staff_requests',
+  batches: 'bb_staff_batches',
 } as const;
 
 export function readStore<T>(key: string, fallback: T): T {

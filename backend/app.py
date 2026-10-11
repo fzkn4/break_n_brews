@@ -8,7 +8,7 @@ from decimal import Decimal
 from datetime import datetime, timedelta
 from config import Config
 from models import (
-    db, Staff, Ingredient, MenuItem, MenuItemIngredient, IngredientRequest, StockInLog, Order, OrderItem,
+    db, Staff, Ingredient, MenuItem, MenuItemIngredient, IngredientRequest, StockInLog, StockBatch, Order, OrderItem,
     Transaction, Review, Subscriber, StoreSettings, ensure_ingredient_lifespan_column, ensure_recipe_size_columns,
     ensure_order_guest_columns, ensure_notification_schema,
     default_lifespan_days, is_sizeable_category, is_auto_customizable, recipe_qty_for_size, LEVEL_MULTIPLIERS,
@@ -16,11 +16,15 @@ from models import (
 )
 from notifications import bp as notifications_bp, safe_check_low_stock, start_scheduler
 from subscribers import bp as subscribers_bp, announce_menu_item, announcement_summary
+from batches import (
+    bp as batches_bp, build_batches, consume, ensure_batch_schema, reconcile, restore, store_today,
+)
 
 app = Flask(__name__)
 app.config.from_object(Config)
 app.register_blueprint(notifications_bp)
 app.register_blueprint(subscribers_bp)
+app.register_blueprint(batches_bp)
 
 # Enable CORS for frontend requests
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -46,6 +50,7 @@ def _ensure_schema():
     ensure_recipe_size_columns()
     ensure_order_guest_columns()
     ensure_notification_schema()
+    ensure_batch_schema()
     _schema_ready = True
     # Started from the first request (not at import) so init_db.py never runs a stray scheduler.
     start_scheduler(app)
@@ -83,6 +88,7 @@ def manage_ingredients():
             lifespan_days=int(data['lifespan_days']) if data.get('lifespan_days') not in (None, '') else default_lifespan_days(data['category'])
         )
         db.session.add(ing)
+        reconcile(ing)
         db.session.commit()
         safe_check_low_stock()
         return jsonify(clean_decimal(ing.to_dict())), 201
@@ -110,6 +116,7 @@ def update_ingredient(id):
         ing.category = data['category']
     if 'stock_level' in data:
         ing.stock_level = float(data['stock_level'])
+        reconcile(ing)
     if 'unit' in data:
         ing.unit = data['unit']
     if 'reorder_point' in data:
@@ -368,11 +375,11 @@ def update_request(id):
         # Check stock sufficiency
         if req.ingredient.stock_level < req.quantity:
             return jsonify({'error': f'Insufficient stock level in inventory. Current stock: {req.ingredient.stock_level} {req.ingredient.unit}'}), 400
-        # Deduct ingredient stock
-        req.ingredient.stock_level -= req.quantity
+        # Deduct ingredient stock, soonest-expiring batch first
+        consume(req.ingredient, req.quantity)
     elif req.status == 'approved' and new_status != 'approved':
         # Revert approved quantity if changed back
-        req.ingredient.stock_level += req.quantity
+        restore(req.ingredient, req.quantity)
 
     req.status = new_status
     if 'notes' in data:
@@ -388,36 +395,66 @@ def update_request(id):
 def manage_stockin():
     if request.method == 'POST':
         data = request.json or {}
-        if not data or 'ingredient_id' not in data or 'quantity' not in data or 'cost' not in data or 'supplier' not in data:
-            return jsonify({'error': 'Missing ingredient_id, quantity, cost or supplier'}), 400
-        
-        qty = float(data['quantity'])
-        cost = Decimal(str(data['cost']))
-        if qty <= 0:
-            return jsonify({'error': 'Quantity must be greater than zero'}), 400
-        if cost <= 0:
-            return jsonify({'error': 'Cost must be greater than zero'}), 400
+        if not data or 'ingredient_id' not in data or 'supplier' not in data:
+            return jsonify({'error': 'Missing ingredient_id or supplier'}), 400
 
         # Check ingredient exists
         ing = Ingredient.query.get(data['ingredient_id'])
         if not ing:
             return jsonify({'error': 'Ingredient not found'}), 404
 
-        # Add quantity to ingredient stock
-        ing.stock_level += qty
-        
-        # Optionally update cost per unit
-        ing.cost_per_unit = Decimal(round(float(cost / Decimal(str(qty))), 2))
+        # Each delivery is one or more batches, each with its own quantity, batch ID and expiry date.
+        rows = data.get('batches')
+        if rows is None:
+            rows = [{
+                'quantity': data.get('quantity'),
+                'batch_code': data.get('batch_code'),
+                'expiry_date': data.get('expiry_date'),
+            }]
+        try:
+            batches = build_batches(ing, rows, store_today())
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+        qty = sum(b[0] for b in batches)
 
+        # Cost is optional for staff, who may not see the invoice: value it at the current unit cost.
+        if data.get('cost') in (None, ''):
+            cost = (Decimal(str(ing.cost_per_unit or 0)) * Decimal(str(qty))).quantize(Decimal('0.01'))
+        else:
+            try:
+                cost = Decimal(str(data['cost']))
+            except ArithmeticError:
+                return jsonify({'error': 'Cost must be a number'}), 400
+            if cost <= 0:
+                return jsonify({'error': 'Cost must be greater than zero'}), 400
+            ing.cost_per_unit = Decimal(round(float(cost / Decimal(str(qty))), 2))
+
+        received_by = (data.get('received_by') or '').strip()[:100] or None
+        now = datetime.utcnow()
         stock_log = StockInLog(
-            ingredient_id=data['ingredient_id'],
+            ingredient_id=ing.id,
             quantity=qty,
             cost=cost,
-            supplier=data['supplier'],
+            supplier=(data.get('supplier') or '').strip() or 'Direct Restock',
             invoice_number=data.get('invoice_number'),
-            received_at=datetime.utcnow()
+            received_by=received_by,
+            received_at=now
         )
         db.session.add(stock_log)
+        for batch_qty, code, expiry in batches:
+            db.session.add(StockBatch(
+                ingredient=ing,
+                stock_in=stock_log,
+                batch_code=code,
+                quantity_received=batch_qty,
+                quantity_remaining=batch_qty,
+                expiry_date=expiry,
+                source='stock_in',
+                received_by=received_by,
+                received_at=now,
+            ))
+        # Add quantity to ingredient stock
+        ing.stock_level += qty
         db.session.commit()
         safe_check_low_stock()
         return jsonify(clean_decimal(stock_log.to_dict())), 201
@@ -496,6 +533,7 @@ def place_order():
     
     # First: Validate stock levels for all items dynamically
     auto_pause = StoreSettings.current().auto_pause_products
+    today = store_today()
     required_ingredients = {}
     for item in items_data:
         menu_item_id = item.get('menu_item_id')
@@ -558,7 +596,7 @@ def place_order():
             needed = qty * (base_qty * multiplier)
             ing = Ingredient.query.get(ing_id)
             if ing:
-                ing.stock_level = max(0.0, float(ing.stock_level) - needed)
+                consume(ing, needed, today)
 
             if is_cust:
                 valid_customs.append({
@@ -955,6 +993,7 @@ if __name__ == '__main__':
             ensure_recipe_size_columns()
             ensure_order_guest_columns()
             ensure_notification_schema()
+            ensure_batch_schema()
             print('Existing database detected — preserving schema and data.')
 
     port = int(os.getenv('PORT', 5000))

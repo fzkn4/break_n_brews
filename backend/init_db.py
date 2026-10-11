@@ -13,6 +13,7 @@ from sqlalchemy import inspect, text
 
 from app import app
 from models import db, ensure_ingredient_lifespan_column, ensure_notification_schema
+from batches import ensure_batch_schema
 
 MAX_WAIT_SECONDS = int(os.getenv('DB_WAIT_TIMEOUT', '60'))
 
@@ -49,6 +50,7 @@ def main():
             db.create_all()
             ensure_ingredient_lifespan_column()
             ensure_notification_schema()
+            ensure_batch_schema()
             print('Existing database detected — skipping seed.')
 
 

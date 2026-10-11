@@ -9,6 +9,7 @@ export const STORAGE_KEYS = {
   requests: 'bb_admin_requests',
   orders: 'bb_admin_orders',
   stockIn: 'bb_admin_stockin',
+  batches: 'bb_admin_batches',
   reviews: 'bb_admin_reviews',
   subscribers: 'bb_admin_subscribers',
   analytics: 'bb_admin_analytics',

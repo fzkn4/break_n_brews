@@ -6,10 +6,12 @@ import { OrderQueue } from './components/OrderQueue';
 import { WalkInMenu } from './components/WalkInMenu';
 import { IngredientSupplyRequests } from './components/IngredientSupplyRequests';
 import { InventoryAlerts } from './components/InventoryAlerts';
+import { StockAndExpiry } from './components/StockAndExpiry';
 import { Login } from './components/Login';
-import type { Ingredient, Order, IngredientRequest } from './types';
+import type { Ingredient, Order, IngredientRequest, StockBatch, StockInLog, StockInPayload } from './types';
 import { hydrateAndMergeMenuItems } from './lib/menuStorage';
 import { STORAGE_KEYS, readStore, writeStore } from './lib/storage';
+import { formatQty, urgentBatchCount } from './lib/expiry';
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
@@ -31,6 +33,9 @@ function App() {
   );
   const [requests, setRequests] = useState<IngredientRequest[]>(() =>
     readStore<IngredientRequest[]>(STORAGE_KEYS.requests, [])
+  );
+  const [batches, setBatches] = useState<StockBatch[]>(() =>
+    readStore<StockBatch[]>(STORAGE_KEYS.batches, [])
   );
   const [loading, setLoading] = useState<boolean>(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -55,11 +60,12 @@ function App() {
   // Sync data from backend
   const syncStaffPortalData = useCallback(async (showSilentError = false) => {
     try {
-      const [ingRes, ordersRes, menuRes, reqsRes] = await Promise.all([
+      const [ingRes, ordersRes, menuRes, reqsRes, batchRes] = await Promise.all([
         fetch(`${API_URL}/ingredients`),
         fetch(`${API_URL}/orders`),
         fetch(`${API_URL}/menu`),
-        fetch(`${API_URL}/requests`)
+        fetch(`${API_URL}/requests`),
+        fetch(`${API_URL}/batches`)
       ]);
 
       if (ingRes.ok) {
@@ -84,6 +90,11 @@ function App() {
         const data = await reqsRes.json();
         setRequests(data);
         writeStore(STORAGE_KEYS.requests, data);
+      }
+      if (batchRes.ok) {
+        const data = await batchRes.json();
+        setBatches(data);
+        writeStore(STORAGE_KEYS.batches, data);
       }
       
       setLoading(false);
@@ -213,9 +224,74 @@ function App() {
     }
   };
 
+  // Receive a delivery, batch by batch, each with its own ID and expiry date
+  const handleRecordStockIn = async (data: StockInPayload): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_URL}/stockin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (res.ok) {
+        const log: StockInLog = await res.json();
+        const codes = (log.batches || []).map((b) => b.batch_code).join(', ');
+        showToast(`Received ${formatQty(log.quantity)} ${log.ingredient_unit} of ${log.ingredient_name}${codes ? ` · ${codes}` : ''}`);
+        syncStaffPortalData(true);
+        return true;
+      }
+      const err = await res.json().catch(() => ({}));
+      showToast(err.error || 'Failed to record delivery', 'error');
+    } catch (err) {
+      showToast('Network error recording delivery', 'error');
+    }
+    return false;
+  };
+
+  const handleUpdateBatch = async (id: number, data: { batch_code?: string; expiry_date?: string }): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_URL}/batches/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (res.ok) {
+        showToast('Batch updated');
+        syncStaffPortalData(true);
+        return true;
+      }
+      const err = await res.json().catch(() => ({}));
+      showToast(err.error || 'Failed to update batch', 'error');
+    } catch (err) {
+      showToast('Network error updating batch', 'error');
+    }
+    return false;
+  };
+
+  const handleDiscardBatch = async (id: number, data: { quantity: number; reason: string; by: string | null }): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_URL}/batches/${id}/discard`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (res.ok) {
+        const batch: StockBatch = await res.json();
+        showToast(`Discarded ${formatQty(data.quantity)} ${batch.ingredient_unit} of ${batch.ingredient_name}`);
+        syncStaffPortalData(true);
+        return true;
+      }
+      const err = await res.json().catch(() => ({}));
+      showToast(err.error || 'Failed to discard batch', 'error');
+    } catch (err) {
+      showToast('Network error discarding batch', 'error');
+    }
+    return false;
+  };
+
   const pendingOrdersCount = orders.filter(o => o.status === 'pending' || o.status === 'preparing').length;
   const pendingRequestsCount = requests.filter(r => r.status === 'pending').length;
   const lowStockCount = ingredients.filter(i => i.stock_level <= i.reorder_point).length;
+  const expiringBatchCount = urgentBatchCount(batches);
 
   if (!currentUser) {
     return (
@@ -240,6 +316,7 @@ function App() {
         pendingOrdersCount={pendingOrdersCount}
         pendingRequestsCount={pendingRequestsCount}
         lowStockCount={lowStockCount}
+        expiringBatchCount={expiringBatchCount}
       />
 
       {/* Main Content Area */}
@@ -299,6 +376,22 @@ function App() {
               setLoading(true);
               syncStaffPortalData();
             }}
+          />
+        )}
+
+        {activeTab === 'stock' && (
+          <StockAndExpiry
+            ingredients={ingredients}
+            batches={batches}
+            currentUserName={currentUser?.name ?? null}
+            loading={loading}
+            onRefresh={() => {
+              setLoading(true);
+              syncStaffPortalData();
+            }}
+            onRecordStockIn={handleRecordStockIn}
+            onUpdateBatch={handleUpdateBatch}
+            onDiscardBatch={handleDiscardBatch}
           />
         )}
 

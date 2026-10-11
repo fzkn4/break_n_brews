@@ -59,8 +59,56 @@ export interface StockInLog {
   cost: number;
   supplier: string;
   invoice_number: string | null;
+  received_by?: string | null;
   received_at: string;
+  batches?: { id: number; batch_code: string; quantity: number; expiry_date: string | null }[];
 }
+
+export type ExpiryStatus = 'expired' | 'critical' | 'soon' | 'ok' | 'unknown';
+
+/** One delivered lot of an ingredient. Stock is drawn from use_rank 1 first (soonest expiry). */
+export interface StockBatch {
+  id: number;
+  ingredient_id: number;
+  ingredient_name: string | null;
+  ingredient_unit: string;
+  ingredient_category: string;
+  stock_in_id: number | null;
+  supplier: string | null;
+  batch_code: string;
+  quantity_received: number;
+  quantity_remaining: number;
+  /** 'YYYY-MM-DD'; null only for opening stock and manual adjustments. */
+  expiry_date: string | null;
+  days_left: number | null;
+  expiry_status: ExpiryStatus;
+  state: 'active' | 'depleted' | 'disposed';
+  /** 1 = open this one next. Null for expired or finished batches. */
+  use_rank: number | null;
+  source: 'stock_in' | 'opening' | 'adjustment';
+  received_by: string | null;
+  received_at: string | null;
+  disposed_at: string | null;
+  disposed_quantity: number | null;
+  disposed_reason: string | null;
+  disposed_by: string | null;
+}
+
+export interface StockInBatchInput {
+  quantity: number;
+  batch_code: string | null;
+  expiry_date: string;
+}
+
+export interface StockInPayload {
+  ingredient_id: number;
+  supplier: string;
+  cost: number | null;
+  invoice_number: string | null;
+  received_by: string | null;
+  batches: StockInBatchInput[];
+}
+
 
 export interface Staff {
   id: number;
