@@ -96,6 +96,29 @@ Other stock movements: `POST /api/stockin` adds quantity and recomputes `cost_pe
 approving an `IngredientRequest` (`PUT /api/requests/<id>`) deducts the requested quantity and un-approving adds it
 back — approval transitions, not creation, are what move stock.
 
+### AI sales insights (`backend/forecasting.py`, `signals.py`, `insights.py`)
+
+- **Numbers come from code, words come from Claude.** `forecasting.build_forecast()` computes per-item trends,
+  a 7-day forecast (60% last-7 + 40% last-28 daily average × a shrunk day-of-week factor), ingredient demand
+  through the recipes, days of cover, run-out dates, suggested order quantities and FEFO expiry risk, plus a
+  walk-forward backtest. Days are business days (orders before an after-midnight closing count to the day
+  before). `signals.py` adds Open-Meteo weather, Nager.Date PH holidays, paydays (15th / month end), and
+  weather effects measured on the store's own history (detrended, weekday-adjusted, t-score >= 2.5, so noise
+  is not reported). None of this needs an API key: `GET /api/insights/forecast`.
+- `insights.py` sends that snapshot to Claude (`claude-opus-5-5`, adaptive thinking, `web_search` located at
+  the store, server-side refusal fallback) and takes the answer through the `submit_insights` tool. `_validate()`
+  drops unknown menu/ingredient ids and any URL web search did not return. Suggestions are advice only;
+  nothing changes stock or the menu.
+- Runs execute on a background thread (`POST /api/insights/refresh` returns 202, the portal polls
+  `GET /api/insights`) and are stored in `ai_insight_runs`; thumbs up/down per insight (`ai_insight_feedback`)
+  is fed into the next prompt. One daily run per store-local date after `AI_INSIGHTS_HOUR` is claimed via
+  `store_settings.last_insight_key` from the notifications scheduler tick; manual runs have a cooldown because
+  each costs money. The latest run (36h or newer) is added to the end-of-day email.
+- `ANTHROPIC_API_KEY` lives only in `backend/.env`; without it `configured: false` and only the AI part is off.
+  Store location (`location_name`, `latitude`, `longitude`) defaults to Pagadian City and is edited in admin's
+  Sales Insights tab. The new `store_settings` columns are added by `ensure_store_settings_columns()`, which
+  must run before anything reads `StoreSettings` (every query selects all mapped columns).
+
 ### Cross-portal "real time" is polling, not sockets
 
 All three portals `setInterval` against the same REST API and re-fetch everything: admin and staffs every 5s,
@@ -164,7 +187,7 @@ remembers which orders it has reviewed in `bb_reviewed_orders` to hide the promp
 `/api/ingredients`, `/api/menu`, `/api/requests`, `/api/stockin`, `/api/staff`, `/api/orders`, `/api/reviews`
 (CRUD subsets), plus `/api/login`, `/api/subscribers` (newsletter signups), `/api/notifications/*`
 (email settings, recipients, log, test send, low-stock digest, daily-report preview/send),
-`/api/analytics?days=N` (KPIs, revenue trend, category distribution, low stock) and
+`/api/insights/*` (AI sales insights, forecast, feedback, location), `/api/analytics?days=N` (KPIs, revenue trend, category distribution, low stock) and
 `/api/reports` (inventory health, supplier summary, sales breakdown). `clean_decimal()` recursively converts
 `Decimal` to `float` before every JSON response — use it on any new response containing money.
 

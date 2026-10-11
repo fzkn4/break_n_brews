@@ -19,12 +19,14 @@ from subscribers import bp as subscribers_bp, announce_menu_item, announcement_s
 from batches import (
     bp as batches_bp, build_batches, consume, ensure_batch_schema, reconcile, restore, store_today,
 )
+from insights import bp as insights_bp, ensure_insights_schema
 
 app = Flask(__name__)
 app.config.from_object(Config)
 app.register_blueprint(notifications_bp)
 app.register_blueprint(subscribers_bp)
 app.register_blueprint(batches_bp)
+app.register_blueprint(insights_bp)
 
 # Enable CORS for frontend requests
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -51,6 +53,7 @@ def _ensure_schema():
     ensure_order_guest_columns()
     ensure_notification_schema()
     ensure_batch_schema()
+    ensure_insights_schema()
     _schema_ready = True
     # Started from the first request (not at import) so init_db.py never runs a stray scheduler.
     start_scheduler(app)

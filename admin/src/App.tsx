@@ -11,6 +11,7 @@ import { Reports } from './components/Reports';
 import { ManageReviews } from './components/ManageReviews';
 import { TableQrCodes } from './components/TableQrCodes';
 import { EmailNotifications } from './components/EmailNotifications';
+import { SalesInsights } from './components/SalesInsights';
 import { Login } from './components/Login';
 import type { Ingredient, MenuItem, IngredientRequest, StockInLog, StockBatch, StockInPayload, AnalyticsData, ReportData, Review, Subscriber, Order, AnnouncementResult } from './types';
 import { hydrateAndMergeMenuItems, saveCustomMenuItem, removeCustomMenuItem, getCustomMenuItems, getDeletedMenuItemIds } from './lib/menuStorage';
@@ -638,6 +639,10 @@ function App() {
         )}
 
         {activeTab === 'notifications' && <EmailNotifications showToast={showToast} />}
+
+        {activeTab === 'insights' && (
+          <SalesInsights showToast={showToast} currentUserName={currentUser?.name ?? null} onNavigate={setActiveTab} />
+        )}
 
         {activeTab === 'reports' && (
           <Reports 

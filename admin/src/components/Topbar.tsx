@@ -44,6 +44,7 @@ export const Topbar: React.FC<TopbarProps> = ({
       case 'reports': return 'View Report/Inventory';
       case 'tables': return 'Table QR Codes';
       case 'notifications': return 'Email Notifications';
+      case 'insights': return 'Sales Insights';
       default: return 'Break & Brews';
     }
   };
