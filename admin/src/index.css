@@ -1533,3 +1533,40 @@ select option {
   transform: none !important;
   box-shadow: none !important;
 }
+
+/* Sales Insights: thumbs up / down on each AI suggestion */
+.insight-vote {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border-glass);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.insight-vote:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.insight-vote:focus-visible {
+  outline: 2px solid var(--accent-gold);
+  outline-offset: 2px;
+}
+
+.insight-vote.is-up {
+  color: #10b981;
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.insight-vote.is-down {
+  color: #ef4444;
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+}
