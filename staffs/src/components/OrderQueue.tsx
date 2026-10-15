@@ -282,17 +282,19 @@ const styles = {
   viewTitle: {
     fontSize: '2rem',
     fontWeight: '800',
-    color: 'var(--primary-brown)',
+    color: '#F8FAFC',
     letterSpacing: '-0.02em',
-    margin: 0
+    margin: 0,
+    textShadow: '0 2px 10px rgba(0,0,0,0.5)',
   },
   viewSubtitle: {
     fontSize: '0.85rem',
     fontWeight: '600',
-    color: 'var(--text-muted)',
+    color: 'rgba(248, 250, 252, 0.85)',
     letterSpacing: '0.05em',
     marginTop: '4px',
-    textTransform: 'uppercase' as const
+    textTransform: 'uppercase' as const,
+    textShadow: '0 1px 6px rgba(0,0,0,0.4)',
   },
   queueGrid: {
     display: 'grid',
@@ -346,26 +348,28 @@ const styles = {
     flexDirection: 'column' as const,
     padding: 0,
     overflow: 'hidden',
-    border: '1px solid var(--sidebar-border)',
-    boxShadow: '0 8px 24px rgba(139, 90, 43, 0.05)',
-    backgroundColor: '#fff',
-    borderRadius: '20px'
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(12, 12, 15, 0.88)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    borderRadius: '12px'
   },
   cardHeaderPreparing: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '20px 24px',
-    backgroundColor: 'var(--card-header-preparing)',
-    borderBottom: '1px dashed var(--sidebar-border)'
+    backgroundColor: 'rgba(212, 163, 115, 0.25)',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
   },
   cardHeaderPending: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '20px 24px',
-    backgroundColor: 'var(--card-header-pending)',
-    borderBottom: '1px dashed var(--sidebar-border)'
+    backgroundColor: 'rgba(18, 18, 22, 0.95)',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
   },
   cardItemName: {
     fontSize: '1.25rem',
@@ -412,7 +416,7 @@ const styles = {
   customizationsText: {
     fontSize: '0.95rem',
     fontWeight: '600',
-    color: 'var(--primary-brown)',
+    color: '#FFFFFF',
     margin: 0
   },
   orderIdText: {

@@ -4,7 +4,6 @@ import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { OrderQueue } from './components/OrderQueue';
 import { WalkInMenu } from './components/WalkInMenu';
-import { IngredientSupplyRequests } from './components/IngredientSupplyRequests';
 import { InventoryAlerts } from './components/InventoryAlerts';
 import { StockAndExpiry } from './components/StockAndExpiry';
 import { Login } from './components/Login';
@@ -31,11 +30,14 @@ function App() {
   const [menuItems, setMenuItems] = useState<any[]>(() =>
     hydrateAndMergeMenuItems(readStore<any[]>(STORAGE_KEYS.menuItems, []))
   );
-  const [requests, setRequests] = useState<IngredientRequest[]>(() =>
+  const [, setRequests] = useState<IngredientRequest[]>(() =>
     readStore<IngredientRequest[]>(STORAGE_KEYS.requests, [])
   );
   const [batches, setBatches] = useState<StockBatch[]>(() =>
     readStore<StockBatch[]>(STORAGE_KEYS.batches, [])
+  );
+  const [stockInLogs, setStockInLogs] = useState<StockInLog[]>(() =>
+    readStore<StockInLog[]>('bb_stockin_logs', [])
   );
   const [loading, setLoading] = useState<boolean>(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -60,12 +62,13 @@ function App() {
   // Sync data from backend
   const syncStaffPortalData = useCallback(async (showSilentError = false) => {
     try {
-      const [ingRes, ordersRes, menuRes, reqsRes, batchRes] = await Promise.all([
+      const [ingRes, ordersRes, menuRes, reqsRes, batchRes, stockInRes] = await Promise.all([
         fetch(`${API_URL}/ingredients`),
         fetch(`${API_URL}/orders`),
         fetch(`${API_URL}/menu`),
         fetch(`${API_URL}/requests`),
-        fetch(`${API_URL}/batches`)
+        fetch(`${API_URL}/batches`),
+        fetch(`${API_URL}/stockin`)
       ]);
 
       if (ingRes.ok) {
@@ -95,6 +98,11 @@ function App() {
         const data = await batchRes.json();
         setBatches(data);
         writeStore(STORAGE_KEYS.batches, data);
+      }
+      if (stockInRes.ok) {
+        const data = await stockInRes.json();
+        setStockInLogs(data);
+        writeStore('bb_stockin_logs', data);
       }
       
       setLoading(false);
@@ -203,27 +211,6 @@ function App() {
     }
   };
 
-  // Update request status (Approve or Reject)
-  const handleUpdateRequestStatus = async (id: number, status: 'approved' | 'rejected') => {
-    try {
-      const res = await fetch(`${API_URL}/requests/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
-      });
-
-      if (res.ok) {
-        showToast(`Request #${id} marked as ${status}`);
-        syncStaffPortalData(true);
-      } else {
-        const err = await res.json();
-        showToast(err.error || `Failed to update request #${id}`, 'error');
-      }
-    } catch (err) {
-      showToast('Network error updating request status', 'error');
-    }
-  };
-
   // Receive a delivery, batch by batch, each with its own ID and expiry date
   const handleRecordStockIn = async (data: StockInPayload): Promise<boolean> => {
     try {
@@ -288,8 +275,28 @@ function App() {
     return false;
   };
 
+  const handleCreateIngredient = async (newIngData: any): Promise<Ingredient | null> => {
+    try {
+      const res = await fetch(`${API_URL}/ingredients`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newIngData)
+      });
+      if (res.ok) {
+        const saved: Ingredient = await res.json();
+        showToast(`Ingredient ${saved.name} added successfully`);
+        syncStaffPortalData(true);
+        return saved;
+      }
+      const err = await res.json();
+      showToast(err.error || 'Failed to add ingredient', 'error');
+    } catch {
+      showToast('Network error adding ingredient', 'error');
+    }
+    return null;
+  };
+
   const pendingOrdersCount = orders.filter(o => o.status === 'pending' || o.status === 'preparing').length;
-  const pendingRequestsCount = requests.filter(r => r.status === 'pending').length;
   const lowStockCount = ingredients.filter(i => i.stock_level <= i.reorder_point).length;
   const expiringBatchCount = urgentBatchCount(batches);
 
@@ -314,7 +321,6 @@ function App() {
         setActiveTab={setActiveTab}
         onLogout={handleLogout}
         pendingOrdersCount={pendingOrdersCount}
-        pendingRequestsCount={pendingRequestsCount}
         lowStockCount={lowStockCount}
         expiringBatchCount={expiringBatchCount}
       />
@@ -325,7 +331,6 @@ function App() {
           <Dashboard
             ingredients={ingredients}
             orders={orders}
-            requests={requests}
             loading={loading}
             onRefresh={() => {
               setLoading(true);
@@ -365,24 +370,11 @@ function App() {
           />
         )}
 
-        {activeTab === 'requests' && (
-          <IngredientSupplyRequests
-            requests={requests}
-            ingredients={ingredients}
-            loading={loading}
-            onUpdateRequestStatus={handleUpdateRequestStatus}
-            onRequestIngredient={handleRequestIngredient}
-            onRefresh={() => {
-              setLoading(true);
-              syncStaffPortalData();
-            }}
-          />
-        )}
-
         {activeTab === 'stock' && (
           <StockAndExpiry
             ingredients={ingredients}
             batches={batches}
+            stockInLogs={stockInLogs}
             currentUserName={currentUser?.name ?? null}
             loading={loading}
             onRefresh={() => {
@@ -392,6 +384,7 @@ function App() {
             onRecordStockIn={handleRecordStockIn}
             onUpdateBatch={handleUpdateBatch}
             onDiscardBatch={handleDiscardBatch}
+            onCreateIngredient={handleCreateIngredient}
           />
         )}
 

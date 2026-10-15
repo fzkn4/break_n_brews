@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, X, AlertTriangle, Filter } from 'lucide-react';
-import type { Ingredient } from '../types';
+import type { Ingredient, StockBatch } from '../types';
 
 const INGREDIENT_CATEGORIES = [
   'Beverages',
@@ -30,8 +30,22 @@ const defaultLifespanDays = (category: string) => CATEGORY_LIFESPAN_DAYS[categor
 
 const INGREDIENT_UNITS = ['kg', 'mg', 'L', 'ml', 'pcs'] as const;
 
+export const getEffectiveStock = (ing: Ingredient, batches?: StockBatch[]) => {
+  if (batches && batches.length > 0) {
+    const ingBatches = batches.filter(b => b.ingredient_id === ing.id);
+    if (ingBatches.length > 0) {
+      const activeUnexpired = ingBatches.filter(
+        b => b.state === 'active' && b.expiry_status !== 'expired' && (Number(b.quantity_remaining) || 0) > 0
+      );
+      return Math.max(0, activeUnexpired.reduce((sum, b) => sum + (Number(b.quantity_remaining) || 0), 0));
+    }
+  }
+  return Math.max(0, Number(ing.stock_level) || 0);
+};
+
 interface IngredientsListProps {
   ingredients: Ingredient[];
+  batches?: StockBatch[];
   onCreateIngredient: (data: any) => void;
   onUpdateIngredient: (id: number, data: any) => void;
   onDeleteIngredient: (id: number) => void;
@@ -39,6 +53,7 @@ interface IngredientsListProps {
 
 export const IngredientsList: React.FC<IngredientsListProps> = ({
   ingredients,
+  batches,
   onCreateIngredient,
   onUpdateIngredient,
   onDeleteIngredient
@@ -77,7 +92,8 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
     setEditIng(ing);
     setName(ing.name);
     setCategory(ing.category);
-    setStockLevel(ing.stock_level.toString());
+    const effStock = getEffectiveStock(ing, batches);
+    setStockLevel(effStock.toString());
     setUnit(ing.unit);
     setReorderPoint(ing.reorder_point.toString());
     setCostPerUnit(ing.cost_per_unit.toString());
@@ -173,8 +189,17 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
               </tr>
             ) : (
               filtered.map((ing) => {
-                const isLowStock = ing.stock_level <= ing.reorder_point;
-                const isOutOfStock = ing.stock_level === 0;
+                const effectiveStock = getEffectiveStock(ing, batches);
+                const isOutOfStock = effectiveStock <= 0.0001;
+                const isLowStock = !isOutOfStock && effectiveStock <= ing.reorder_point;
+
+                const ingBatches = (batches || []).filter(b => b.ingredient_id === ing.id);
+                const activeUnexpiredBatches = ingBatches.filter(
+                  b => b.state === 'active' && b.expiry_status !== 'expired' && (Number(b.quantity_remaining) || 0) > 0
+                );
+                const expiredBatches = ingBatches.filter(
+                  b => b.state === 'active' && b.expiry_status === 'expired' && (Number(b.quantity_remaining) || 0) > 0
+                );
 
                 return (
                   <tr key={ing.id}>
@@ -183,7 +208,19 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
                       <span style={styles.categoryBadge}>{ing.category}</span>
                     </td>
                     <td style={{ fontWeight: '700', color: isOutOfStock ? '#ef4444' : isLowStock ? '#f59e0b' : 'var(--text-primary)' }}>
-                      {ing.stock_level} {ing.unit}
+                      <div>
+                        {effectiveStock % 1 === 0 ? effectiveStock : Number(effectiveStock.toFixed(2))} {ing.unit}
+                      </div>
+                      {activeUnexpiredBatches.length > 0 && (
+                        <div style={{ fontSize: '11px', fontWeight: '500', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          {activeUnexpiredBatches.length} active batch{activeUnexpiredBatches.length > 1 ? 'es' : ''}
+                        </div>
+                      )}
+                      {expiredBatches.length > 0 && (
+                        <div style={{ fontSize: '11px', fontWeight: '600', color: '#ef4444', marginTop: '2px' }}>
+                          ({expiredBatches.length} expired excluded)
+                        </div>
+                      )}
                     </td>
                     <td style={{ color: 'var(--text-muted)' }}>
                       {ing.reorder_point} {ing.unit}
@@ -432,24 +469,24 @@ const styles = {
   statusLowStock: {
     display: 'inline-flex',
     alignItems: 'center',
-    backgroundColor: 'rgba(245, 158, 11, 0.08)',
-    border: '1px solid rgba(245, 158, 11, 0.2)',
-    color: '#f59e0b',
+    backgroundColor: 'rgba(255, 77, 77, 0.15)',
+    border: '1px solid rgba(255, 77, 77, 0.4)',
+    color: '#FF4D4D',
     padding: '2px 8px',
-    borderRadius: '4px',
+    borderRadius: '6px',
     fontSize: '0.75rem',
-    fontWeight: '600'
+    fontWeight: '700'
   },
   statusOutOfStock: {
     display: 'inline-flex',
     alignItems: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
-    color: '#ef4444',
+    backgroundColor: 'rgba(255, 77, 77, 0.2)',
+    border: '1px solid rgba(255, 77, 77, 0.5)',
+    color: '#FF4D4D',
     padding: '2px 8px',
-    borderRadius: '4px',
+    borderRadius: '6px',
     fontSize: '0.75rem',
-    fontWeight: '600'
+    fontWeight: '700'
   },
   modalContent: {
     maxWidth: '480px'

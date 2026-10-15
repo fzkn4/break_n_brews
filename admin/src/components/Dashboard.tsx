@@ -43,7 +43,7 @@ function getPredictionDetails(item: Ingredient) {
 }
 
 const STATUS_COLOR: Record<PredictionStatus, string> = {
-  critical: '#ef4444',
+  critical: '#FF4D4D',
   warning: '#f59e0b',
   low: '#eab308',
   normal: '#10b981'
@@ -227,9 +227,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     padding: '4px 10px',
                     fontSize: '0.75rem',
                     borderRadius: '6px',
-                    border: analyticsDays === days ? '1px solid #f59e0b' : '1px solid var(--border-glass)',
-                    backgroundColor: analyticsDays === days ? 'rgba(245,158,11,0.12)' : 'var(--surface-muted)',
-                    color: analyticsDays === days ? '#f59e0b' : 'var(--text-muted)',
+                    border: analyticsDays === days ? '1px solid #D4A373' : '1px solid var(--border-glass)',
+                    backgroundColor: analyticsDays === days ? 'rgba(212,163,115,0.18)' : 'var(--surface-muted)',
+                    color: analyticsDays === days ? '#D4A373' : 'var(--text-muted)',
                     cursor: 'pointer',
                     fontWeight: analyticsDays === days ? '600' : '400',
                     transition: 'all 0.2s'
@@ -245,8 +245,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} style={styles.svg}>
               <defs>
                 <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.25" />
-                  <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.0" />
+                  <stop offset="0%" stopColor="#D4A373" stopOpacity="0.25" />
+                  <stop offset="100%" stopColor="#D4A373" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
               <line x1={paddingX} y1={paddingY} x2={chartWidth - paddingX} y2={paddingY} stroke="var(--chart-grid)" />
@@ -254,7 +254,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <line x1={paddingX} y1={chartHeight - paddingY} x2={chartWidth - paddingX} y2={chartHeight - paddingY} stroke="var(--chart-grid)" />
               
               {areaPath && <path d={areaPath} fill="url(#revGrad)" />}
-              {linePath && <path d={linePath} fill="none" stroke="#f59e0b" strokeWidth="2.5" />}
+              {linePath && <path d={linePath} fill="none" stroke="#D4A373" strokeWidth="2.5" />}
               
               {/* Guidelines on hover */}
               {hoveredPoint && (
@@ -263,7 +263,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   y1={paddingY}
                   x2={hoveredPoint.x}
                   y2={chartHeight - paddingY}
-                  stroke="#f59e0b"
+                  stroke="#D4A373"
                   strokeWidth="1"
                   strokeDasharray="4 4"
                   opacity="0.6"
@@ -274,7 +274,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 const showDate = revenue_trend.length <= 7 || i % Math.ceil(revenue_trend.length / 7) === 0;
                 return (
                   <g key={i}>
-                    <circle cx={p.x} cy={p.y} r="3.5" fill="var(--chart-dot-fill)" stroke="#f59e0b" strokeWidth="2" />
+                    <circle cx={p.x} cy={p.y} r="3.5" fill="var(--chart-dot-fill)" stroke="#D4A373" strokeWidth="2" />
                     {showDate && (
                       <text x={p.x} y={chartHeight - 4} fill="var(--text-muted)" fontSize="9" textAnchor="middle">{p.date}</text>
                     )}
@@ -288,7 +288,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   cx={hoveredPoint.x}
                   cy={hoveredPoint.y}
                   r="7"
-                  fill="#f59e0b"
+                  fill="#D4A373"
                   opacity="0.4"
                   style={{ pointerEvents: 'none' }}
                 />
@@ -320,8 +320,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 left: `${(hoveredPoint.x / chartWidth) * 100}%`,
                 top: `${(hoveredPoint.y / chartHeight) * 100 - 15}%`,
                 transform: 'translate(-50%, -100%)',
-                backgroundColor: 'var(--tooltip-bg)',
-                border: '1px solid #f59e0b',
+                backgroundColor: 'rgba(12, 12, 15, 0.95)',
+                border: '1px solid #D4A373',
                 borderRadius: '8px',
                 padding: '6px 10px',
                 color: 'var(--text-primary)',
@@ -334,7 +334,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 backdropFilter: 'blur(8px)'
               }}>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem', marginBottom: '2px' }}>{hoveredPoint.date}</div>
-                <div style={{ fontWeight: '700', color: '#f59e0b' }}>₱{hoveredPoint.val.toFixed(2)}</div>
+                <div style={{ fontWeight: '700', color: '#D4A373' }}>₱{hoveredPoint.val.toFixed(2)}</div>
               </div>
             )}
           </div>
@@ -727,9 +727,9 @@ const styles = {
   spinner: {
     width: '40px',
     height: '40px',
-    border: '3px solid rgba(245,158,11,0.1)',
+    border: '3px solid rgba(212,163,115,0.15)',
     borderRadius: '50%',
-    borderTopColor: '#f59e0b',
+    borderTopColor: '#D4A373',
     animation: 'spin 1s linear infinite'
   },
   statsGrid: {
@@ -963,12 +963,12 @@ const styles = {
   },
   lowStockLabel: {
     fontSize: '0.75rem',
-    color: '#ef4444',
+    color: '#FF4D4D',
     fontWeight: '500'
   },
   lowStockLevel: {
     fontWeight: '700',
-    color: '#ef4444',
+    color: '#FF4D4D',
     fontSize: '0.9rem'
   },
   lowStockReorder: {

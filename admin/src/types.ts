@@ -24,6 +24,7 @@ export interface MenuItem {
   created_at: string;
   offered_sizes?: ('Small' | 'Regular' | 'Large')[];
   supports_sizes?: boolean;
+  size_config?: Record<string, { oz: number; container_id: number | null; straw_id?: number | null }> | null;
   /** Automatic: an ingredient is at/below its reorder point. Separate from the manual is_available switch. */
   stock_paused?: boolean;
   paused_ingredients?: string[];

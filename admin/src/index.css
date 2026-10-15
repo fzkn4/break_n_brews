@@ -15,16 +15,16 @@
   -moz-osx-font-smoothing: grayscale;
 
   /* Color System */
-  --bg-primary: #222831;
-  --bg-secondary: #393E46;
-  --bg-tertiary: #2c323b;
-  --bg-glass: rgba(57, 62, 70, 0.65);
+  --bg-primary: #0c0c0f;
+  --bg-secondary: rgba(12, 12, 15, 0.88);
+  --bg-tertiary: rgba(18, 18, 22, 0.88);
+  --bg-glass: rgba(12, 12, 15, 0.88);
   --border-glass: rgba(255, 255, 255, 0.08);
   --border-hover: rgba(255, 255, 255, 0.18);
 
-  --accent-gold: #f59e0b;
-  --accent-gold-hover: #d97706;
-  --accent-gold-glow: rgba(245, 158, 11, 0.2);
+  --accent-gold: #D4A373;
+  --accent-gold-hover: #c08d5b;
+  --accent-gold-glow: rgba(212, 163, 115, 0.2);
 
   --felt-green: #059669;
   --felt-green-glow: rgba(5, 150, 105, 0.25);
@@ -33,19 +33,20 @@
   --felt-vip-glow: rgba(124, 58, 237, 0.25);
 
   --status-avail: #10b981;
-  --status-occ: #ef4444;
+  --status-occ: #FF4D4D;
   --status-maint: #6b7280;
   --status-prep: #3b82f6;
+  --danger: #FF4D4D;
 
   --text-primary: #ffffff;
-  --text-secondary: #f3f4f6;
-  --text-muted: #9ca3af;
-  --text-dark: #6b7280;
+  --text-secondary: #E2E8F0;
+  --text-muted: #94a3b8;
+  --text-dark: #64748b;
 
-  --card-bg: rgba(57, 62, 70, 0.55);
-  --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  --input-bg: rgba(0, 0, 0, 0.25);
-  --bg-gradient: radial-gradient(circle at 10% 20%, rgba(245, 158, 11, 0.03) 0%, transparent 40%),
+  --card-bg: rgba(12, 12, 15, 0.88);
+  --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  --input-bg: rgba(0, 0, 0, 0.35);
+  --bg-gradient: radial-gradient(circle at 10% 20%, rgba(212, 163, 115, 0.03) 0%, transparent 40%),
                   radial-gradient(circle at 90% 80%, rgba(124, 58, 237, 0.04) 0%, transparent 45%);
 
   --surface-muted: rgba(255, 255, 255, 0.04);
@@ -53,10 +54,10 @@
   --row-hover: rgba(255, 255, 255, 0.04);
   --table-border: rgba(255, 255, 255, 0.08);
   --chart-grid: rgba(255, 255, 255, 0.1);
-  --chart-dot-fill: #222831;
-  --tooltip-bg: rgba(34, 40, 49, 0.96);
-  --dropdown-bg: rgba(34, 40, 49, 0.96);
-  --modal-overlay: rgba(15, 18, 24, 0.85);
+  --chart-dot-fill: #0c0c0f;
+  --tooltip-bg: rgba(12, 12, 15, 0.95);
+  --dropdown-bg: rgba(12, 12, 15, 0.95);
+  --modal-overlay: rgba(0, 0, 0, 0.75);
   --icon-on-dark: #ffffff;
 }
 
@@ -105,8 +106,21 @@ body {
   overflow: hidden;
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  background-image: var(--bg-gradient);
+  background-image: url('/src/assets/admin-bg.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   background-attachment: fixed;
+}
+
+/* Glassmorphism Login Card Overlay */
+.glass-card,
+.login-card {
+  background: rgba(18, 18, 20, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
 }
 
 /* Custom Scrollbar */
@@ -131,14 +145,21 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  background-image: url('/src/assets/admin-bg.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 .sidebar-container {
   width: 260px;
   height: 100%;
   flex-shrink: 0;
-  background-color: var(--bg-secondary);
-  border-right: 1px solid var(--border-glass);
+  background: rgba(12, 12, 15, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
   z-index: 100;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -254,9 +275,9 @@ body {
 }
 
 .sidebar-nav-btn.active {
-  background-color: var(--accent-gold-glow);
-  color: var(--text-primary);
-  box-shadow: inset 4px 0 10px rgba(245, 158, 11, 0.05);
+  background-color: rgba(212, 163, 115, 0.15) !important;
+  color: #D4A373 !important;
+  box-shadow: inset 4px 0 10px rgba(212, 163, 115, 0.1);
 }
 
 .sidebar-nav-btn.active:hover {
@@ -279,7 +300,7 @@ body {
 }
 
 .sidebar-nav-btn.active .nav-icon {
-  color: #f59e0b;
+  color: #D4A373 !important;
 }
 
 .sidebar-nav-btn .btn-label {
@@ -289,15 +310,16 @@ body {
 }
 
 .sidebar-nav-btn.active .btn-label {
+  color: #D4A373 !important;
   font-weight: 600;
 }
 
 .glass-card {
-  background: var(--card-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-glass);
-  border-radius: 16px;
+  background: rgba(12, 12, 15, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
   padding: 24px;
   box-shadow: var(--card-shadow);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s, box-shadow 0.3s;
@@ -311,9 +333,11 @@ body {
 /* Glass Inputs */
 .glass-input {
   box-sizing: border-box;
-  background: var(--input-bg);
-  border: 1px solid var(--border-glass);
-  border-radius: 8px;
+  background: rgba(12, 12, 15, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
   color: var(--text-primary);
   padding: 10px 14px;
   font-family: inherit;
@@ -339,7 +363,7 @@ select option {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  border-radius: 8px;
+  border-radius: 12px;
   font-weight: 500;
   font-size: 0.95rem;
   font-family: inherit;
@@ -355,7 +379,8 @@ select option {
 .btn-primary {
   background: var(--accent-gold);
   color: #0b0b0e;
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(212, 163, 115, 0.15);
 }
 
 .btn-primary:hover {
@@ -363,33 +388,35 @@ select option {
   transform: translateY(-2px);
   box-shadow: 
     0 8px 20px var(--accent-gold-glow),
-    0 0 15px rgba(245, 158, 11, 0.35);
+    0 0 15px rgba(212, 163, 115, 0.35);
 }
 
 .btn-secondary {
-  background: var(--input-bg);
-  color: var(--text-primary);
-  border: 1px solid var(--border-glass);
+  background: rgba(212, 163, 115, 0.12);
+  color: #D4A373;
+  border: 1px solid rgba(212, 163, 115, 0.3);
+  border-radius: 12px;
 }
 
 .btn-secondary:hover {
-  background: var(--border-glass);
-  border-color: var(--border-hover);
+  background: rgba(212, 163, 115, 0.22);
+  border-color: #D4A373;
   transform: translateY(-2px);
-  box-shadow: var(--card-shadow);
+  box-shadow: 0 4px 12px rgba(212, 163, 115, 0.2);
 }
 
 .btn-danger {
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: rgba(255, 77, 77, 0.15);
+  color: #FF4D4D;
+  border: 1px solid rgba(255, 77, 77, 0.35);
+  border-radius: 12px;
 }
 
 .btn-danger:hover {
-  background: rgba(239, 68, 68, 0.22);
-  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(255, 77, 77, 0.25);
+  border-color: rgba(255, 77, 77, 0.5);
   transform: translateY(-2px);
-  box-shadow: 0 6px 15px rgba(239, 68, 68, 0.15);
+  box-shadow: 0 6px 15px rgba(255, 77, 77, 0.2);
 }
 
 /* Modal Close Buttons */
@@ -434,9 +461,12 @@ select option {
   color: var(--status-avail);
 }
 
-.badge-occupied {
-  background: rgba(239, 68, 68, 0.12);
-  color: var(--status-occ);
+.badge-occupied,
+.badge-critical,
+.badge-danger {
+  background: rgba(255, 77, 77, 0.15);
+  color: #FF4D4D;
+  border: 1px solid rgba(255, 77, 77, 0.4);
 }
 
 .badge-maintenance {
@@ -472,31 +502,84 @@ select option {
   animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-/* Modals & Dialogs Overlay */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--modal-overlay);
-  backdrop-filter: blur(8px);
-  z-index: 1000;
-  display: flex;
+/* Login CTA Button & Card Slide-in */
+.get-started-cta {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 10px;
+  padding: 14px 38px;
+  border-radius: 999px;
+  background-color: #C89D66;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #0B0B0C;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(200, 157, 102, 0.35), 0 2px 6px rgba(0, 0, 0, 0.4);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.get-started-cta:hover {
+  background-color: #d6ad76;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(200, 157, 102, 0.48), 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.get-started-cta:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 14px rgba(200, 157, 102, 0.3);
+}
+
+@keyframes loginSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.login-fade-in {
+  animation: loginSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Modals & Dialogs Overlay */
+.modal-overlay {
+  display: flex !important;
+  align-items: center !important;       /* Centers vertically */
+  justify-content: center !important;   /* Centers horizontally */
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999 !important;             /* Ensures it floats above all table layers */
+  background: var(--modal-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   padding: 16px;
+  box-sizing: border-box !important;
   animation: fadeIn 0.2s ease-out;
 }
 
 .modal-content {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-glass);
-  border-radius: 20px;
+  margin: auto !important;
+  transform: none !important;
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+  background: rgba(12, 12, 15, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
   width: 100%;
   max-width: 550px;
-  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.6);
   position: relative;
 }
 
@@ -579,20 +662,22 @@ select option {
 
 .crud-table th, .crud-table td {
   padding: 14px 16px;
-  border-bottom: 1px solid var(--table-border);
-  color: var(--text-primary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
 }
 
 .crud-table th {
   font-weight: 600;
-  color: var(--text-muted);
+  color: #E2E8F0;
   font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--bg-secondary);
+  background: rgba(12, 12, 15, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .crud-table tbody tr {
@@ -1334,10 +1419,12 @@ select option {
 
 .modal-content {
   position: relative !important;
-  background: var(--bg-secondary, #1a1714) !important;
-  border: 1px solid var(--border-glass, rgba(255, 255, 255, 0.15)) !important;
-  border-radius: 20px !important;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 35px rgba(245, 158, 11, 0.15) !important;
+  background: rgba(12, 12, 15, 0.95) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(212, 163, 115, 0.1) !important;
   width: min(760px, 100%) !important;
   max-height: min(88vh, 850px) !important;
   display: flex !important;

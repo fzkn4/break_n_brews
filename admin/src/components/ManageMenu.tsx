@@ -9,6 +9,28 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 const SIZE_CHOICES = ['Small', 'Regular', 'Large'] as const;
 type SizeChoice = (typeof SIZE_CHOICES)[number];
 
+const DEFAULT_SIZE_VOLUMES: Record<SizeChoice, string> = {
+  Small: '12',
+  Regular: '16',
+  Large: '22',
+};
+
+function findMatchingContainer(ozVal: string | number, containers: Ingredient[]): number | '' {
+  const ozNum = parseFloat(String(ozVal));
+  if (!ozNum || isNaN(ozNum)) return '';
+  const match = containers.find((c) => {
+    const n = c.name.toLowerCase();
+    return n.includes(`${ozNum}oz`) || n.includes(`${ozNum} oz`) || n.includes(`${ozNum} `);
+  });
+  return match ? match.id : '';
+}
+
+function findMatchingStraw(straws: Ingredient[]): number | '' {
+  if (!straws.length) return '';
+  const match = straws.find((s) => /straw/i.test(s.name));
+  return match ? match.id : (straws[0]?.id ?? '');
+}
+
 function isSizeableCategory(category: string): boolean {
   const c = category.toLowerCase().trim();
   if (/alcohol|beer|wine|can/.test(c)) return false;
@@ -98,11 +120,40 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
   const [imageNote, setImageNote] = useState('');
   const [selectedIngredients, setSelectedIngredients] = useState<RecipeRow[]>([]);
   const [offeredSizes, setOfferedSizes] = useState<SizeChoice[]>([]);
+  const [sizeVolumes, setSizeVolumes] = useState<Record<SizeChoice, string>>({ ...DEFAULT_SIZE_VOLUMES });
+  const [sizeContainers, setSizeContainers] = useState<Record<SizeChoice, number | ''>>({
+    Small: '',
+    Regular: '',
+    Large: '',
+  });
+  const [sizeStraws, setSizeStraws] = useState<Record<SizeChoice, number | ''>>({
+    Small: '',
+    Regular: '',
+    Large: '',
+  });
   const [sizesTouched, setSizesTouched] = useState(false);
   const [newIngredientId, setNewIngredientId] = useState<number | ''>('');
   const [announceEnabled, setAnnounceEnabled] = useState(false);
   const [announceNote, setAnnounceNote] = useState('');
   const offersSizes = offeredSizes.length > 0;
+
+  const containerIngredients = useMemo(() => {
+    return ingredients.filter(
+      (ing) =>
+        !/straw/i.test(ing.name) &&
+        (ing.category.toLowerCase() === 'packaging' ||
+          ing.unit.toLowerCase() === 'pcs' ||
+          /cup|glass|container|bottle|box/i.test(ing.name))
+    );
+  }, [ingredients]);
+
+  const strawIngredients = useMemo(() => {
+    return ingredients.filter(
+      (ing) =>
+        /straw/i.test(ing.name) ||
+        (ing.category.toLowerCase() === 'packaging' && !/cup|glass|container|bottle|box/i.test(ing.name))
+    );
+  }, [ingredients]);
 
   // Categories are whatever the menu in the database actually uses — no fixed list to fall behind.
   const categories = useMemo(
@@ -122,6 +173,19 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
     setImageUrl('');
     setImageNote('');
     setSelectedIngredients([]);
+    const initialVols = { ...DEFAULT_SIZE_VOLUMES };
+    setSizeVolumes(initialVols);
+    setSizeContainers({
+      Small: findMatchingContainer(initialVols.Small, containerIngredients),
+      Regular: findMatchingContainer(initialVols.Regular, containerIngredients),
+      Large: findMatchingContainer(initialVols.Large, containerIngredients),
+    });
+    const defaultStrawId = findMatchingStraw(strawIngredients);
+    setSizeStraws({
+      Small: defaultStrawId,
+      Regular: defaultStrawId,
+      Large: defaultStrawId,
+    });
     setOfferedSizes(isSizeableCategory(categories[0] ?? '') ? [...SIZE_CHOICES] : []);
     setSizesTouched(false);
     setNewIngredientId('');
@@ -144,19 +208,96 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
     setIsAvailable(item.is_available);
     setImageUrl(item.image_url || '');
     setImageNote('');
+
+    const sc = item.size_config;
+    let initialVols = { ...DEFAULT_SIZE_VOLUMES };
+    let initialContainers: Record<SizeChoice, number | ''> = { Small: '', Regular: '', Large: '' };
+    let initialStraws: Record<SizeChoice, number | ''> = { Small: '', Regular: '', Large: '' };
+
+    if (sc) {
+      if (sc.Small?.oz) initialVols.Small = String(sc.Small.oz);
+      if (sc.Regular?.oz) initialVols.Regular = String(sc.Regular.oz);
+      if (sc.Large?.oz) initialVols.Large = String(sc.Large.oz);
+      initialContainers = {
+        Small: sc.Small?.container_id ?? '',
+        Regular: sc.Regular?.container_id ?? '',
+        Large: sc.Large?.container_id ?? '',
+      };
+      initialStraws = {
+        Small: sc.Small?.straw_id ?? '',
+        Regular: sc.Regular?.straw_id ?? '',
+        Large: sc.Large?.straw_id ?? '',
+      };
+    } else {
+      const ingList = item.ingredients || [];
+      for (const pi of ingList) {
+        const full = ingredients.find((i) => i.id === pi.ingredient_id);
+        const isPack = full && (full.category.toLowerCase() === 'packaging' || /cup|straw/i.test(full.name));
+        if (!isPack) continue;
+        const n = (pi.name || '').toLowerCase();
+        const isStraw = /straw/i.test(n);
+        if (isStraw) {
+          if (pi.qty_small && pi.qty_small > 0) initialStraws.Small = pi.ingredient_id;
+          if (pi.qty_medium && pi.qty_medium > 0) initialStraws.Regular = pi.ingredient_id;
+          if (pi.qty_large && pi.qty_large > 0) initialStraws.Large = pi.ingredient_id;
+        } else {
+          if (pi.qty_small && pi.qty_small > 0) {
+            initialContainers.Small = pi.ingredient_id;
+            const match = n.match(/(\d+)\s*oz/);
+            if (match) initialVols.Small = match[1];
+          }
+          if (pi.qty_medium && pi.qty_medium > 0) {
+            initialContainers.Regular = pi.ingredient_id;
+            const match = n.match(/(\d+)\s*oz/);
+            if (match) initialVols.Regular = match[1];
+          }
+          if (pi.qty_large && pi.qty_large > 0) {
+            initialContainers.Large = pi.ingredient_id;
+            const match = n.match(/(\d+)\s*oz/);
+            if (match) initialVols.Large = match[1];
+          }
+        }
+      }
+      if (!initialContainers.Small) initialContainers.Small = findMatchingContainer(initialVols.Small, containerIngredients);
+      if (!initialContainers.Regular) initialContainers.Regular = findMatchingContainer(initialVols.Regular, containerIngredients);
+      if (!initialContainers.Large) initialContainers.Large = findMatchingContainer(initialVols.Large, containerIngredients);
+      const defaultStrawId = findMatchingStraw(strawIngredients);
+      if (!initialStraws.Small) initialStraws.Small = defaultStrawId;
+      if (!initialStraws.Regular) initialStraws.Regular = defaultStrawId;
+      if (!initialStraws.Large) initialStraws.Large = defaultStrawId;
+    }
+    setSizeVolumes(initialVols);
+    setSizeContainers(initialContainers);
+    setSizeStraws(initialStraws);
+
+    const linkedPackIds = new Set([
+      ...Object.values(initialContainers).filter((id): id is number => typeof id === 'number' && id > 0),
+      ...Object.values(initialStraws).filter((id): id is number => typeof id === 'number' && id > 0),
+    ]);
+
     setSelectedIngredients(
       item.ingredients
-        ? item.ingredients.map((ing) => {
-            const med = ing.qty_medium ?? ing.default_quantity;
-            return {
-              ingredient_id: ing.ingredient_id,
-              default_quantity: toFriendlyQty(ing.default_quantity, ing.unit),
-              qty_small: toFriendlyQty(ing.qty_small ?? med * 0.75, ing.unit),
-              qty_medium: toFriendlyQty(med, ing.unit),
-              qty_large: toFriendlyQty(ing.qty_large ?? med * 1.25, ing.unit),
-              is_customizable: ing.is_customizable
-            };
-          })
+        ? item.ingredients
+            .filter((ing) => {
+              if (linkedPackIds.has(ing.ingredient_id)) return false;
+              if (/cup|straw/i.test(ing.name)) return false;
+              const full = ingredients.find((i) => i.id === ing.ingredient_id);
+              if (full && full.category.toLowerCase() === 'packaging') return false;
+              return true;
+            })
+            .map((ing) => {
+              const med = ing.qty_medium ?? ing.default_quantity;
+              const smallRatio = (parseFloat(initialVols.Small) || 12) / (parseFloat(initialVols.Regular) || 16);
+              const largeRatio = (parseFloat(initialVols.Large) || 22) / (parseFloat(initialVols.Regular) || 16);
+              return {
+                ingredient_id: ing.ingredient_id,
+                default_quantity: toFriendlyQty(ing.default_quantity, ing.unit),
+                qty_small: toFriendlyQty(ing.qty_small ?? roundQty(med * smallRatio), ing.unit),
+                qty_medium: toFriendlyQty(med, ing.unit),
+                qty_large: toFriendlyQty(ing.qty_large ?? roundQty(med * largeRatio), ing.unit),
+                is_customizable: ing.is_customizable
+              };
+            })
         : []
     );
     setOfferedSizes(
@@ -176,6 +317,47 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
     setOfferedSizes((current) =>
       current.includes(size) ? current.filter((entry) => entry !== size) : SIZE_CHOICES.filter((entry) => entry === size || current.includes(entry))
     );
+  };
+
+  const updateSizeVolume = (size: SizeChoice, newOzStr: string) => {
+    setSizeVolumes((prev) => ({ ...prev, [size]: newOzStr }));
+    const newOz = parseFloat(newOzStr);
+    if (!isNaN(newOz) && newOz > 0) {
+      setSizeContainers((prev) => {
+        const currentContainerId = prev[size];
+        const prevOz = parseFloat(sizeVolumes[size]);
+        const prevMatch = findMatchingContainer(prevOz, containerIngredients);
+        if (!currentContainerId || currentContainerId === prevMatch) {
+          const nextMatch = findMatchingContainer(newOz, containerIngredients);
+          if (nextMatch) {
+            return { ...prev, [size]: nextMatch };
+          }
+        }
+        return prev;
+      });
+
+      const regOz = size === 'Regular' ? newOz : (parseFloat(sizeVolumes.Regular) || 16);
+      setSelectedIngredients((prev) =>
+        prev.map((row) => {
+          if (size === 'Small' && regOz > 0) {
+            const ratio = newOz / regOz;
+            return { ...row, qty_small: roundQty(row.qty_medium * ratio) };
+          } else if (size === 'Large' && regOz > 0) {
+            const ratio = newOz / regOz;
+            return { ...row, qty_large: roundQty(row.qty_medium * ratio) };
+          } else if (size === 'Regular' && newOz > 0) {
+            const smallOz = parseFloat(sizeVolumes.Small) || 12;
+            const largeOz = parseFloat(sizeVolumes.Large) || 22;
+            return {
+              ...row,
+              qty_small: roundQty(row.qty_medium * (smallOz / newOz)),
+              qty_large: roundQty(row.qty_medium * (largeOz / newOz)),
+            };
+          }
+          return row;
+        })
+      );
+    }
   };
 
   const attachImage = async (file: File | undefined) => {
@@ -202,21 +384,25 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
   const addIngredientToRecipe = () => {
     if (newIngredientId === '') return;
     const ingId = Number(newIngredientId);
-    if (selectedIngredients.some(i => i.ingredient_id === ingId)) return;
+    if (selectedIngredients.some((i) => i.ingredient_id === ingId)) return;
 
-    const dbIng = ingredients.find(i => i.id === ingId);
+    const dbIng = ingredients.find((i) => i.id === ingId);
     if (!dbIng) return;
 
     const baseDb = 0.1;
     const friendlyMed = toFriendlyQty(baseDb, dbIng.unit);
+    const regOz = parseFloat(sizeVolumes.Regular) || 16;
+    const smOz = parseFloat(sizeVolumes.Small) || 12;
+    const lgOz = parseFloat(sizeVolumes.Large) || 22;
+
     setSelectedIngredients((prev) => [
       ...prev,
       {
         ingredient_id: ingId,
         default_quantity: friendlyMed,
-        qty_small: roundQty(friendlyMed * 0.75),
+        qty_small: roundQty(friendlyMed * (regOz > 0 ? smOz / regOz : 0.75)),
         qty_medium: friendlyMed,
-        qty_large: roundQty(friendlyMed * 1.25),
+        qty_large: roundQty(friendlyMed * (regOz > 0 ? lgOz / regOz : 1.25)),
         is_customizable: isAutoCustomizable(dbIng)
       }
     ]);
@@ -275,6 +461,73 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
       ? (parsedMedium ?? parsedSmall ?? parsedLarge ?? (parseFloat(price) || 0))
       : (parseFloat(price) || 0);
 
+    // Build combined recipe rows: beverage ingredients + linked container cups
+    const recipeRows: any[] = [];
+
+    // 1. Food and beverage recipe ingredients
+    for (const recipe of selectedIngredients) {
+      const ing = ingredients.find((i) => i.id === recipe.ingredient_id);
+      if (offersSizes && ing) {
+        const qtyMedium = fromFriendlyQty(recipe.qty_medium, ing.unit);
+        recipeRows.push({
+          ingredient_id: recipe.ingredient_id,
+          default_quantity: qtyMedium,
+          qty_small: fromFriendlyQty(recipe.qty_small, ing.unit),
+          qty_medium: qtyMedium,
+          qty_large: fromFriendlyQty(recipe.qty_large, ing.unit),
+          is_customizable: recipe.is_customizable
+        });
+      } else {
+        const qty = ing ? fromFriendlyQty(recipe.default_quantity, ing.unit) : recipe.default_quantity;
+        recipeRows.push({
+          ingredient_id: recipe.ingredient_id,
+          default_quantity: qty,
+          is_customizable: recipe.is_customizable
+        });
+      }
+    }
+
+    // 2. Linked packaging items (cups and straws) for active sizes so inventory deducts automatically on sale
+    if (offersSizes) {
+      const packMap = new Map<number, { small: number; regular: number; large: number }>();
+      const addPackDeduction = (ingId: number | '', size: SizeChoice) => {
+        if (typeof ingId === 'number' && ingId > 0) {
+          if (!packMap.has(ingId)) {
+            packMap.set(ingId, { small: 0, regular: 0, large: 0 });
+          }
+          const counts = packMap.get(ingId)!;
+          if (size === 'Small') counts.small += 1.0;
+          if (size === 'Regular') counts.regular += 1.0;
+          if (size === 'Large') counts.large += 1.0;
+        }
+      };
+
+      for (const size of offeredSizes) {
+        addPackDeduction(sizeContainers[size], size);
+        addPackDeduction(sizeStraws[size], size);
+      }
+
+      for (const [pId, counts] of packMap.entries()) {
+        recipeRows.push({
+          ingredient_id: pId,
+          default_quantity: 1.0,
+          qty_small: counts.small,
+          qty_medium: counts.regular,
+          qty_large: counts.large,
+          is_customizable: false
+        });
+      }
+    }
+
+    const sizeConfigPayload: Record<string, { oz: number; container_id: number | null; straw_id: number | null }> = {};
+    for (const size of SIZE_CHOICES) {
+      sizeConfigPayload[size] = {
+        oz: parseFloat(sizeVolumes[size]) || (size === 'Small' ? 12 : size === 'Regular' ? 16 : 22),
+        container_id: typeof sizeContainers[size] === 'number' && sizeContainers[size] > 0 ? (sizeContainers[size] as number) : null,
+        straw_id: typeof sizeStraws[size] === 'number' && sizeStraws[size] > 0 ? (sizeStraws[size] as number) : null
+      };
+    }
+
     const payload = {
       name,
       category,
@@ -285,26 +538,8 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
       is_available: isAvailable,
       image_url: imageUrl || null,
       offered_sizes: offeredSizes,
-      ingredients: selectedIngredients.map((recipe) => {
-        const ing = ingredients.find((i) => i.id === recipe.ingredient_id);
-        if (offersSizes && ing) {
-          const qtyMedium = fromFriendlyQty(recipe.qty_medium, ing.unit);
-          return {
-            ingredient_id: recipe.ingredient_id,
-            default_quantity: qtyMedium,
-            qty_small: fromFriendlyQty(recipe.qty_small, ing.unit),
-            qty_medium: qtyMedium,
-            qty_large: fromFriendlyQty(recipe.qty_large, ing.unit),
-            is_customizable: recipe.is_customizable
-          };
-        }
-        const qty = ing ? fromFriendlyQty(recipe.default_quantity, ing.unit) : recipe.default_quantity;
-        return {
-          ingredient_id: recipe.ingredient_id,
-          default_quantity: qty,
-          is_customizable: recipe.is_customizable
-        };
-      })
+      size_config: sizeConfigPayload,
+      ingredients: recipeRows
     };
 
     if (editItem) {
@@ -330,7 +565,7 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
       image_url: imageUrl || null,
       made_with: selectedIngredients
         .map((row) => ingredients.find((i) => i.id === row.ingredient_id))
-        .filter((ing): ing is Ingredient => Boolean(ing) && ing!.category !== 'Packaging')
+        .filter((ing): ing is Ingredient => Boolean(ing) && ing!.category !== 'Packaging' && !/cup|straw/i.test(ing!.name))
         .map((ing) => ing.name)
     };
   };
@@ -500,7 +735,7 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
       {/* Add / Edit Menu Item Modal */}
       {showModal && createPortal(
         <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="modal-content" style={{ ...styles.modalContent, maxWidth: offersSizes ? '760px' : '560px' }}>
+          <div className="modal-content" style={{ ...styles.modalContent, maxWidth: offersSizes ? '820px' : '560px' }}>
             <div style={styles.modalHeader}>
               <h3 style={styles.modalTitle}>
                 {editItem ? 'Modify Menu Catalog Item' : 'Create New Menu Catalog Item'}
@@ -618,6 +853,7 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
                     const on = offeredSizes.includes(size);
                     const sizePrice = size === 'Small' ? priceSmall : size === 'Regular' ? priceMedium : priceLarge;
                     const setSizePrice = size === 'Small' ? setPriceSmall : size === 'Regular' ? setPriceMedium : setPriceLarge;
+                    const volumeOz = sizeVolumes[size] || (size === 'Small' ? '12' : size === 'Regular' ? '16' : '22');
 
                     return (
                       <div
@@ -636,27 +872,118 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
                           type="button"
                           onClick={() => toggleOfferedSize(size)}
                           className={on ? 'btn btn-primary' : 'btn btn-secondary'}
-                          style={{ width: '100%', padding: '6px 10px', fontSize: '0.85rem', fontWeight: 600 }}
+                          style={{ width: '100%', padding: '6px 8px', fontSize: '0.82rem', fontWeight: 600 }}
                           aria-pressed={on}
                         >
-                          {on ? `✓ ${size}` : `+ ${size}`}
+                          {on ? `✓ ${size} (${volumeOz} oz)` : `+ ${size} (${volumeOz} oz)`}
                         </button>
                         {on && (
-                          <div style={{ marginTop: '2px' }}>
-                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '3px', fontWeight: 500 }}>
-                              {size} Price (₱) <span style={{ color: '#ef4444' }}>*</span>
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0.01"
-                              className="glass-input"
-                              placeholder="0.00"
-                              value={sizePrice}
-                              onChange={(e) => setSizePrice(e.target.value)}
-                              style={{ width: '100%', padding: '4px 8px', fontSize: '0.85rem', boxSizing: 'border-box', fontWeight: 600 }}
-                              required={on}
-                            />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '2px' }}>
+                            <div>
+                              <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '3px', fontWeight: 500 }}>
+                                Volume (oz) <span style={{ color: '#ef4444' }}>*</span>
+                              </label>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="1"
+                                  className="glass-input"
+                                  placeholder="e.g. 12"
+                                  value={sizeVolumes[size]}
+                                  onChange={(e) => updateSizeVolume(size, e.target.value)}
+                                  list={`preset-oz-${size}`}
+                                  style={{ width: '100%', padding: '4px 8px', fontSize: '0.85rem', boxSizing: 'border-box', fontWeight: 600 }}
+                                  required={on}
+                                />
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>oz</span>
+                              </div>
+                              <datalist id={`preset-oz-${size}`}>
+                                <option value="8">8 oz</option>
+                                <option value="10">10 oz</option>
+                                <option value="12">12 oz</option>
+                                <option value="14">14 oz</option>
+                                <option value="16">16 oz</option>
+                                <option value="20">20 oz</option>
+                                <option value="22">22 oz</option>
+                                <option value="24">24 oz</option>
+                              </datalist>
+                            </div>
+
+                            <div>
+                              <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '3px', fontWeight: 500 }}>
+                                {size} Price (₱) <span style={{ color: '#ef4444' }}>*</span>
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                className="glass-input"
+                                placeholder="0.00"
+                                value={sizePrice}
+                                onChange={(e) => setSizePrice(e.target.value)}
+                                style={{ width: '100%', padding: '4px 8px', fontSize: '0.85rem', boxSizing: 'border-box', fontWeight: 600 }}
+                                required={on}
+                              />
+                            </div>
+
+                            <div>
+                              <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '3px', fontWeight: 500 }}>
+                                Linked Cup <span style={{ fontSize: '0.65rem', color: 'var(--accent-gold, #eab308)' }}>(Inventory)</span>
+                              </label>
+                              <select
+                                className="glass-input"
+                                value={sizeContainers[size]}
+                                onChange={(e) =>
+                                  setSizeContainers((prev) => ({
+                                    ...prev,
+                                    [size]: e.target.value === '' ? '' : Number(e.target.value)
+                                  }))
+                                }
+                                style={{ width: '100%', padding: '4px 6px', fontSize: '0.78rem', boxSizing: 'border-box' }}
+                              >
+                                <option value="">No cup linked</option>
+                                {containerIngredients.map((ing) => (
+                                  <option key={ing.id} value={ing.id} style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                                    {ing.name} ({ing.stock_level} {ing.unit})
+                                  </option>
+                                ))}
+                              </select>
+                              {sizeContainers[size] !== '' && (
+                                <div style={{ fontSize: '0.66rem', color: '#10b981', marginTop: '2px', fontWeight: 500 }}>
+                                  ✓ Deducts 1 cup on {size} sale
+                                </div>
+                              )}
+                            </div>
+
+                            <div>
+                              <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '3px', fontWeight: 500 }}>
+                                Linked Straw <span style={{ fontSize: '0.65rem', color: 'var(--accent-gold, #eab308)' }}>(Inventory)</span>
+                              </label>
+                              <select
+                                className="glass-input"
+                                value={sizeStraws[size]}
+                                onChange={(e) =>
+                                  setSizeStraws((prev) => ({
+                                    ...prev,
+                                    [size]: e.target.value === '' ? '' : Number(e.target.value)
+                                  }))
+                                }
+                                style={{ width: '100%', padding: '4px 6px', fontSize: '0.78rem', boxSizing: 'border-box' }}
+                              >
+                                <option value="">No straw linked</option>
+                                {strawIngredients.map((ing) => (
+                                  <option key={ing.id} value={ing.id} style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                                    {ing.name} ({ing.stock_level} {ing.unit})
+                                  </option>
+                                ))}
+                              </select>
+                              {sizeStraws[size] !== '' && (
+                                <div style={{ fontSize: '0.66rem', color: '#10b981', marginTop: '2px', fontWeight: 500 }}>
+                                  ✓ Deducts 1 straw on {size} sale
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -813,6 +1140,9 @@ export const ManageMenu: React.FC<ManageMenuProps> = ({
                     <option value="">Select ingredient to add...</option>
                     {ingredients
                       .filter(ing => !selectedIngredients.some(si => si.ingredient_id === ing.id))
+                      .filter(ing => !Object.values(sizeContainers).includes(ing.id))
+                      .filter(ing => !Object.values(sizeStraws).includes(ing.id))
+                      .filter(ing => !/cup|straw/i.test(ing.name) && ing.category.toLowerCase() !== 'packaging')
                       .map(ing => (
                         <option key={ing.id} value={ing.id} style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
                           {ing.name} ({ing.unit})

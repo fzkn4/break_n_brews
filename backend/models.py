@@ -125,6 +125,9 @@ def ensure_recipe_size_columns():
             if 'price_large' not in columns:
                 conn.execute(text('ALTER TABLE menu_items ADD COLUMN price_large NUMERIC(10, 2)'))
                 print('Added menu_items.price_large column')
+            if 'size_config' not in columns:
+                conn.execute(text('ALTER TABLE menu_items ADD COLUMN size_config TEXT'))
+                print('Added menu_items.size_config column')
         if insp.has_table('order_items'):
             columns = {col['name'] for col in insp.get_columns('order_items')}
             if 'size' not in columns:
@@ -367,6 +370,7 @@ class MenuItem(db.Model):
     is_available = db.Column(db.Boolean, default=True)
     image_url = db.Column(db.String(255), nullable=True)
     offered_sizes = db.Column(db.Text, nullable=True)  # JSON list, e.g. ["Small","Medium","Large"]
+    size_config = db.Column(db.Text, nullable=True)  # JSON object, e.g. {"Small": {"oz": 12, "container_id": 7}}
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -384,13 +388,20 @@ class MenuItem(db.Model):
 
     def low_stock_ingredients(self):
         """Names of recipe ingredients at or under their reorder point."""
-        return [r.ingredient.name for r in self.ingredients if is_low_stock(r.ingredient)]
+        return [r.ingredient.name for r in self.ingredients if r.ingredient and is_low_stock(r.ingredient)]
 
     def to_dict(self, auto_pause=None):
         offered = offered_sizes_for(self)
         if auto_pause is None:
             auto_pause = StoreSettings.current().auto_pause_products
         paused_by = self.low_stock_ingredients() if auto_pause else []
+        size_config_dict = None
+        if self.size_config:
+            try:
+                size_config_dict = json.loads(self.size_config)
+            except Exception:
+                size_config_dict = None
+
         return {
             'id': self.id,
             'name': self.name,
@@ -404,20 +415,21 @@ class MenuItem(db.Model):
             'created_at': self.created_at.isoformat(),
             'offered_sizes': offered,
             'supports_sizes': bool(offered),
+            'size_config': size_config_dict,
             # is_available is the admin's manual switch; stock_paused is automatic and lifts on restock.
             'stock_paused': bool(paused_by),
             'paused_ingredients': paused_by,
             'ingredients': [
                 {
                     'ingredient_id': mi.ingredient_id,
-                    'name': mi.ingredient.name,
-                    'unit': mi.ingredient.unit,
+                    'name': mi.ingredient.name if mi.ingredient else 'Unknown',
+                    'unit': mi.ingredient.unit if mi.ingredient else '',
                     'default_quantity': mi.default_quantity,
                     'qty_small': mi.qty_small,
                     'qty_medium': mi.qty_medium,
                     'qty_large': mi.qty_large,
                     'is_customizable': mi.is_customizable
-                } for mi in self.ingredients
+                } for mi in self.ingredients if mi.ingredient
             ]
         }
 

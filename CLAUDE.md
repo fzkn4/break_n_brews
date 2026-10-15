@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Break & Brews is a café/billiards management system: one Flask + PostgreSQL API (`backend/`) serving three
 independent Vite + React 19 + TypeScript SPAs — `admin/` (inventory, menu/recipes, requests, stock-in, reports),
-`staffs/` (kitchen order queue, ingredient requests), and `customer/` (mobile-first ordering + live order tracker).
+`staffs/` (kitchen order queue, stock-in, inventory alerts + supply requests), and `customer/` (mobile-first ordering + live order tracker).
 
 There is no monorepo tooling. Each frontend has its own `package.json`, `node_modules`, and `package-lock.json`;
 install and run each separately.
@@ -76,17 +76,23 @@ makes every menu item a bill of materials over `Ingredient`. Nearly every behavi
   walks each recipe, subtracts what the cart has already reserved, and uses the result to badge items "Only N left"
   or "Sold out" and cap the quantity stepper. It is a courtesy layer only — the backend still decides, and its 400
   message is shown to the customer verbatim.
+- **Sized drinks also consume packaging**: `MenuItem.size_config` (JSON, e.g.
+  `{"Small": {"oz": 12, "container_id": 7, "straw_id": 9}}`) links each size to a cup and straw ingredient.
+  `POST /api/orders` adds one of each per unit unless the recipe already uses that ingredient — again in both the
+  validation pass and the deduction pass. Admin's `ManageMenu` pre-picks them by name (`12oz`, `straw`).
 
 ### Stock batches and expiry (`backend/batches.py`, `StockBatch` in `models.py`)
 
 - Every stock-in is one or more **batches** (`stock_batches`), each with its own `batch_code` (auto-generated
-  `WM-261011-01` style when blank, unique per ingredient) and a required `expiry_date` that may not be in the past.
+  `WM-20261011-01` style when blank (2 letters for one-word names, initials otherwise), unique per ingredient) and a required `expiry_date` that may not be in the past.
   `POST /api/stockin` takes `batches: [{quantity, batch_code, expiry_date}]`; `cost` is optional (staff) and then
   valued at the current `cost_per_unit` without changing it.
-- `Ingredient.stock_level` is still the total everyone reads; active batches' `quantity_remaining` always sum to it.
-  **Never assign `stock_level` directly** — use `consume()` / `restore()` / `reconcile()` from `batches.py`, which
-  draw first-expired-first-out: undated batches (opening stock, manual adjustments) first, then soonest expiry,
-  expired batches last. `GET /api/batches` returns `use_rank` (1 = open next; null for expired).
+- `Ingredient.stock_level` is still the total everyone reads, but it counts **only unexpired** active batches —
+  `recalculate_stock()` derives it from them, and `GET /api/ingredients` recalculates (and commits) every
+  ingredient on each read so stock drops the day a batch expires. **Never assign `stock_level` directly** — use
+  `consume()` / `restore()` / `reconcile()` from `batches.py`. Consumption is first-expired-first-out over dated
+  batches (soonest expiry first), then undated batches (opening stock, manual adjustments) oldest first; expired
+  batches are never drawn from and wait to be discarded. `GET /api/batches` returns `use_rank` (1 = open next; null for expired).
 - `ensure_batch_schema()` gives existing stock an undated `OPEN-…` batch on first start; portals nudge users to add
   its expiry. `POST /api/batches/<id>/discard` writes off expired/spoiled stock; `PUT /api/batches/<id>` fixes a
   code or date. Admin "Stock In & Expiry" and the staff tab of the same name share `ReceiveStockForm` and
@@ -165,7 +171,7 @@ remembers which orders it has reviewed in `bb_reviewed_orders` to hide the promp
 - Styling is a mix: shared layout/component classes live in `index.css` (dark theme by default, `.light-theme` on
   `<html>` toggles light in admin), while per-element layout is frequently written as inline `style={{}}` objects.
   Match whichever the surrounding file uses. `customer/` is the exception — it is fully class-based off the
-  cream/espresso tokens in its own `index.css`, with breakpoints at 900/780/520px and a mobile tab bar; keep new
+  dark matte tokens in its own `index.css`, with breakpoints at 900/780/520px and a mobile tab bar; keep new
   customer markup on classes rather than inline styles.
 - Money renders as `$0.00` in all three portals.
 - Backend timestamps are naive UTC (`datetime.utcnow().isoformat()`, no `Z`). `customer/` parses them through

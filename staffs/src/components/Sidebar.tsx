@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Package, UtensilsCrossed, FileText, AlertTriangle, LogOut, CalendarClock } from 'lucide-react';
+import { LayoutDashboard, Package, UtensilsCrossed, AlertTriangle, LogOut, CalendarClock } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
@@ -17,7 +17,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   onLogout,
   pendingOrdersCount,
-  pendingRequestsCount = 0,
   lowStockCount = 0,
   expiringBatchCount = 0,
 }) => {
@@ -25,9 +24,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'DASHBOARD', icon: LayoutDashboard },
     { id: 'orders', label: 'ORDER QUEUE', icon: Package, badge: pendingOrdersCount },
     { id: 'menu', label: 'MENU', icon: UtensilsCrossed },
-    { id: 'requests', label: 'INGREDIENTS SUPPLY REQUEST', icon: FileText, badge: pendingRequestsCount },
     { id: 'stock', label: 'STOCK IN & EXPIRY', icon: CalendarClock, badge: expiringBatchCount, badgeColor: '#f97316' },
-    { id: 'alerts', label: 'INVENTORY ALERT', icon: AlertTriangle, badge: lowStockCount, badgeColor: '#ef4444' },
+    { id: 'alerts', label: 'INVENTORY ALERT', icon: AlertTriangle, badge: lowStockCount, badgeColor: '#FF4D4D' },
   ];
 
   return (
@@ -51,18 +49,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`group flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-200 ease-in-out hover:translate-x-2 hover:bg-amber-500/10 hover:text-amber-500 active:scale-95 sidebar-nav-btn ${isActive ? 'active border-l-4 border-amber-500' : ''}`}
-              style={styles.navBtn}
+              className={`group flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-200 ease-in-out hover:translate-x-1 sidebar-nav-btn ${isActive ? 'active' : ''}`}
+              style={{
+                ...styles.navBtn,
+                backgroundColor: isActive ? 'rgba(212, 163, 115, 0.18)' : 'transparent',
+                color: isActive ? '#D4A373' : '#FFFFFF',
+                borderLeft: isActive ? '4px solid #D4A373' : '4px solid transparent',
+              }}
             >
               <div className="btn-content" style={styles.btnContent}>
-                <Icon size={18} color={isActive ? 'var(--accent-primary)' : 'var(--text-muted)'} style={{ flexShrink: 0 }} />
-                <span style={styles.btnLabel} className="group-hover:text-amber-500 font-medium">{item.label}</span>
+                <Icon
+                  size={18}
+                  color={isActive ? '#D4A373' : '#FFFFFF'}
+                  style={{ flexShrink: 0, transition: 'color 0.2s ease' }}
+                />
+                <span
+                  style={{
+                    ...styles.btnLabel,
+                    color: isActive ? '#D4A373' : '#FFFFFF',
+                    fontWeight: isActive ? 700 : 600,
+                  }}
+                >
+                  {item.label}
+                </span>
               </div>
               {item.badge !== undefined && item.badge > 0 && (
-                <span style={{
-                  ...styles.badge,
-                  backgroundColor: item.badgeColor || 'var(--accent-primary)'
-                }}>
+                <span
+                  style={{
+                    ...styles.badge,
+                    backgroundColor: item.badgeColor || '#D4A373',
+                  }}
+                >
                   {item.badge}
                 </span>
               )}
@@ -74,12 +91,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div style={styles.footer}>
         <button
           onClick={onLogout}
-          className="group flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-200 ease-in-out hover:translate-x-2 hover:bg-amber-500/10 hover:text-amber-500 active:scale-95 sidebar-nav-btn"
+          className="group flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-200 ease-in-out hover:translate-x-1 sidebar-nav-btn"
           style={{ ...styles.navBtn, ...styles.logoutBtn }}
         >
           <div className="btn-content" style={styles.btnContent}>
-            <LogOut size={18} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-            <span className="group-hover:text-amber-500 font-medium">LOGOUT</span>
+            <LogOut size={18} color="#FFFFFF" style={{ flexShrink: 0 }} />
+            <span style={{ color: '#FFFFFF', fontWeight: 600 }}>LOGOUT</span>
           </div>
         </button>
       </div>
@@ -91,10 +108,10 @@ const styles = {
   sidebar: {
     width: '260px',
     height: '100vh',
-    backgroundColor: 'var(--sidebar-bg)',
-    backdropFilter: 'blur(16px)',
-    WebkitBackdropFilter: 'blur(16px)',
-    borderRight: '1px solid var(--sidebar-border)',
+    background: 'rgba(12, 12, 15, 0.88)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    borderRight: '1px solid rgba(255, 255, 255, 0.08)',
     display: 'flex',
     flexDirection: 'column' as const,
     padding: '30px 16px',
@@ -110,7 +127,8 @@ const styles = {
     width: '80px',
     height: '80px',
     borderRadius: '20px',
-    backgroundColor: 'rgba(148, 118, 86, 0.05)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -126,7 +144,7 @@ const styles = {
     margin: 0,
     fontSize: '1.5rem',
     fontWeight: '800',
-    color: '#4a3f35',
+    color: '#FFFFFF',
     letterSpacing: '3px',
     textTransform: 'uppercase' as const,
   },
@@ -148,6 +166,9 @@ const styles = {
     justifyContent: 'space-between',
     width: '100%',
     textAlign: 'left' as const,
+    border: 'none',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
   },
   btnContent: {
     display: 'flex',
@@ -165,7 +186,7 @@ const styles = {
     fontSize: '0.7rem',
     fontWeight: '800',
     color: '#fff',
-    backgroundColor: 'var(--accent-primary)',
+    backgroundColor: '#D4A373',
     padding: '2px 7px',
     borderRadius: '10px',
     lineHeight: '1.2',
@@ -175,10 +196,11 @@ const styles = {
   footer: {
     marginTop: 'auto',
     paddingTop: '16px',
-    borderTop: '1px solid var(--sidebar-border)',
+    borderTop: '1px solid rgba(255, 255, 255, 0.1)',
   },
   logoutBtn: {
     width: '100%',
+    backgroundColor: 'transparent',
+    color: '#FFFFFF',
   },
 };
-

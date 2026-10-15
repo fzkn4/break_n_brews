@@ -505,8 +505,10 @@ const styles = {
   },
   levelCard: {
     padding: '12px 14px',
-    borderRadius: 10,
-    border: '1px solid var(--border-glass)',
+    borderRadius: 12,
+    background: 'rgba(12, 12, 15, 0.88)',
+    backdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
     display: 'flex',
     flexDirection: 'column' as const,
     gap: 4
