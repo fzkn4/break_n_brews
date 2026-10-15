@@ -21,7 +21,7 @@ export const BatchQueue: React.FC<BatchQueueProps> = ({
   currentUserName,
   onUpdateBatch,
   onDiscardBatch,
-  cardClassName = 'card',
+  cardClassName = 'glass-card',
 }) => {
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
@@ -45,31 +45,50 @@ export const BatchQueue: React.FC<BatchQueueProps> = ({
       list.push(b);
       byIngredient.set(b.ingredient_id, list);
     }
-    const out: { id: number; name: string; unit: string; category: string; total: number; rows: StockBatch[]; weight: number; soonest: number }[] = [];
+    const out: { id: number; name: string; unit: string; category: string; total: number; expiredTotal: number; rows: StockBatch[]; weight: number; soonest: number }[] = [];
     for (const [id, list] of byIngredient) {
       const first = list[0];
       const nameHit = !q || (first.ingredient_name || '').toLowerCase().includes(q);
       const rows = list
         .filter((b) => filter === 'all' || b.expiry_status === filter)
         .filter((b) => nameHit || b.batch_code.toLowerCase().includes(q))
-        // Expired first so they get discarded, then the order stock is actually drawn in.
+        // Expired first so they get discarded, then earliest expiry, then use_rank FIFO
         .sort((a, b) => {
-          if ((a.use_rank === null) !== (b.use_rank === null)) return a.use_rank === null ? -1 : 1;
-          return (a.use_rank ?? 0) - (b.use_rank ?? 0);
+          // 1. Expired batches at the top
+          const aExp = a.expiry_status === 'expired' || (a.days_left !== null && a.days_left < 0);
+          const bExp = b.expiry_status === 'expired' || (b.days_left !== null && b.days_left < 0);
+          if (aExp !== bExp) return aExp ? -1 : 1;
+
+          // 2. Earliest expiry date
+          if (a.expiry_date && b.expiry_date) {
+            if (a.expiry_date !== b.expiry_date) return a.expiry_date.localeCompare(b.expiry_date);
+          } else if (a.expiry_date && !b.expiry_date) {
+            return -1;
+          } else if (!a.expiry_date && b.expiry_date) {
+            return 1;
+          }
+
+          // 3. FIFO / use_rank fallback
+          if (a.use_rank !== null && b.use_rank !== null) return a.use_rank - b.use_rank;
+          return (a.id || 0) - (b.id || 0);
         });
       if (rows.length === 0) continue;
+      const usableList = list.filter((b) => b.expiry_status !== 'expired');
+      const expiredList = list.filter((b) => b.expiry_status === 'expired');
       out.push({
         id,
         name: first.ingredient_name || `Ingredient #${id}`,
         unit: first.ingredient_unit,
         category: first.ingredient_category,
-        total: list.reduce((s, b) => s + b.quantity_remaining, 0),
+        total: usableList.reduce((s, b) => s + b.quantity_remaining, 0),
+        expiredTotal: expiredList.reduce((s, b) => s + b.quantity_remaining, 0),
         rows,
         weight: Math.min(...list.map((b) => STATUS_WEIGHT[b.expiry_status])),
         soonest: Math.min(...list.map((b) => (b.days_left ?? 99999))),
       });
     }
-    return out.sort((a, b) => a.weight - b.weight || a.soonest - b.soonest || a.name.localeCompare(b.name));
+    // Alphabetical Sorting (A to Z) by Ingredient Name
+    return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
   }, [active, filter, search]);
 
   const saveEdit = async () => {
@@ -98,9 +117,9 @@ export const BatchQueue: React.FC<BatchQueueProps> = ({
     if (ok) setDiscarding(null);
   };
 
-  const filters: { id: Filter; label: string; count: number; tone?: ExpiryStatus }[] = [
+  const filters: { id: Filter; label: string; count: number; tone?: ExpiryStatus; isExpiredFilter?: boolean }[] = [
     { id: 'all', label: 'All batches', count: counts.all },
-    { id: 'expired', label: 'Expired', count: counts.expired, tone: 'expired' },
+    { id: 'expired', label: 'Expired', count: counts.expired, isExpiredFilter: true },
     { id: 'critical', label: 'Use within 2 days', count: counts.critical, tone: 'critical' },
     { id: 'soon', label: 'This week', count: counts.soon, tone: 'soon' },
     { id: 'unknown', label: 'No expiry date', count: counts.unknown, tone: 'unknown' },
@@ -131,6 +150,7 @@ export const BatchQueue: React.FC<BatchQueueProps> = ({
         <div style={styles.filterRow}>
           {filters.map((f) => {
             const on = filter === f.id;
+            const isExp = f.isExpiredFilter;
             const tone = f.tone ? EXPIRY_TONE[f.tone] : null;
             return (
               <button
@@ -141,11 +161,17 @@ export const BatchQueue: React.FC<BatchQueueProps> = ({
                 style={{
                   ...styles.filterChip,
                   ...(on
-                    ? { background: tone ? tone.bg : 'rgba(59,130,246,0.12)', borderColor: tone ? tone.border : 'rgba(59,130,246,0.4)', color: tone ? tone.color : '#3b82f6' }
+                    ? isExp
+                      ? { background: 'rgba(255, 77, 77, 0.18)', borderColor: '#FF4D4D', color: '#FF4D4D' }
+                      : { background: tone ? tone.bg : 'rgba(59,130,246,0.12)', borderColor: tone ? tone.border : 'rgba(59,130,246,0.4)', color: tone ? tone.color : '#3b82f6' }
                     : {}),
                 }}
               >
-                {tone && <span style={{ ...styles.dot, background: tone.color }} />}
+                {isExp ? (
+                  <span style={{ ...styles.dot, background: '#FF4D4D' }} />
+                ) : (
+                  tone && <span style={{ ...styles.dot, background: tone.color }} />
+                )}
                 {f.label}
                 <span style={styles.filterCount}>{f.count}</span>
               </button>
@@ -159,7 +185,7 @@ export const BatchQueue: React.FC<BatchQueueProps> = ({
           <PackageCheck size={30} color="#10b981" style={{ opacity: 0.6 }} />
           <span>
             {active.length === 0
-              ? 'No batches on hand yet. Receive a delivery to start the queue.'
+              ? 'No batches on hand yet. Stock in a delivery to start the queue.'
               : filter === 'expired'
                 ? 'Nothing expired. Nice work.'
                 : 'No batches match this filter.'}
@@ -168,21 +194,30 @@ export const BatchQueue: React.FC<BatchQueueProps> = ({
       ) : (
         <div style={styles.groupList}>
           {groups.map((g) => (
-            <section key={g.id} style={styles.group}>
+            <section key={g.id} style={styles.groupCard} className="glass-card">
               <header style={styles.groupHead}>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={styles.groupName}>{g.name}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0, flex: 1 }}>
+                  <span style={styles.groupName} title={g.name}>{g.name}</span>
                   <span style={styles.groupMeta}>{g.category}</span>
                 </div>
-                <span style={styles.groupTotal}>
-                  {formatQty(g.total)} {g.unit} on hand
-                </span>
+                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', flexShrink: 0 }}>
+                  <span style={styles.groupTotal}>
+                    <strong style={{ color: '#FFFFFF', fontSize: '0.88rem', fontWeight: 800 }}>{formatQty(g.total)}</strong>{' '}
+                    <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{g.unit} on hand</span>
+                  </span>
+                  {g.expiredTotal > 0 && (
+                    <span style={styles.expiredBadgeTotal}>
+                      +{formatQty(g.expiredTotal)} {g.unit} expired
+                    </span>
+                  )}
+                </div>
               </header>
 
               <ol style={styles.batchList}>
                 {g.rows.map((b) => {
                   const tone = EXPIRY_TONE[b.expiry_status];
-                  const isNext = b.use_rank === 1;
+                  const isExpired = b.expiry_status === 'expired' || (b.days_left !== null && b.days_left < 0);
+                  const isNext = b.use_rank === 1 && !isExpired;
                   const isEditing = editing?.id === b.id;
                   const pct = b.quantity_received > 0 ? Math.min(100, (b.quantity_remaining / b.quantity_received) * 100) : 100;
                   const received = parseServerTime(b.received_at);
@@ -191,128 +226,153 @@ export const BatchQueue: React.FC<BatchQueueProps> = ({
                       key={b.id}
                       style={{
                         ...styles.batch,
-                        borderColor: isNext || b.expiry_status === 'expired' ? tone.border : 'var(--border-glass)',
-                        background: b.expiry_status === 'expired' ? tone.bg : isNext ? 'var(--surface-muted, rgba(148,118,86,0.05))' : 'transparent',
+                        borderColor: isExpired
+                          ? '#FF4D4D'
+                          : isNext
+                            ? '#f97316'
+                            : 'rgba(255, 255, 255, 0.08)',
+                        background: isExpired
+                          ? 'rgba(255, 77, 77, 0.08)'
+                          : isNext
+                            ? 'rgba(249, 115, 22, 0.06)'
+                            : 'rgba(18, 18, 22, 0.65)',
                       }}
                     >
-                      <div style={styles.rankCol}>
-                        {b.use_rank === null ? (
-                          <span style={{ ...styles.rankPill, color: tone.color, borderColor: tone.border, background: tone.bg }}>
-                            <AlertTriangle size={12} /> Discard
-                          </span>
-                        ) : isNext ? (
-                          <span style={{ ...styles.rankPill, color: '#fff', background: tone.color, borderColor: tone.color }}>
-                            #1 · Use first
-                          </span>
-                        ) : (
-                          <span style={styles.rankNum}>#{b.use_rank}</span>
-                        )}
+                      {/* Top Row: Rank badge, Batch ID, and Action buttons */}
+                      <div style={styles.batchTopRow}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                          {isExpired || b.use_rank === null ? (
+                            <span style={styles.rankPillExpired}>
+                              <AlertTriangle size={12} color="#FFFFFF" /> Discard
+                            </span>
+                          ) : isNext ? (
+                            <span style={styles.rankPillNext}>
+                              #1 · Use first
+                            </span>
+                          ) : (
+                            <span style={styles.rankNum}>#{b.use_rank}</span>
+                          )}
+
+                          {isEditing ? (
+                            <input
+                              className="glass-input"
+                              value={editing.code}
+                              maxLength={60}
+                              onChange={(e) => setEditing({ ...editing, code: e.target.value })}
+                              style={{ flex: 1, minWidth: '90px', boxSizing: 'border-box', fontFamily: 'ui-monospace, monospace', fontSize: '0.82rem', padding: '4px 8px' }}
+                              aria-label="Batch ID"
+                            />
+                          ) : (
+                            <code style={styles.code}>{b.batch_code}</code>
+                          )}
+                        </div>
+
+                        <div style={styles.actionCol}>
+                          {isEditing ? (
+                            <>
+                              <button type="button" style={{ ...styles.actionBtn, color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.35)' }} onClick={saveEdit} disabled={busy} title="Save">
+                                <Check size={14} />
+                              </button>
+                              <button type="button" style={styles.actionBtn} onClick={() => setEditing(null)} title="Cancel">
+                                <X size={14} />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              {b.expiry_status === 'unknown' && (
+                                <button
+                                  type="button"
+                                  style={styles.textAction}
+                                  onClick={() => setEditing({ id: b.id, code: b.batch_code, expiry: '' })}
+                                >
+                                  + Expiry
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                style={styles.actionBtn}
+                                onClick={() => setEditing({ id: b.id, code: b.batch_code, expiry: b.expiry_date || '' })}
+                                title="Edit batch ID or expiry"
+                                aria-label={`Edit ${b.batch_code}`}
+                              >
+                                <Pencil size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                style={isExpired ? styles.actionBtnDiscard : styles.actionBtn}
+                                onClick={() =>
+                                  setDiscarding({
+                                    batch: b,
+                                    quantity: formatQty(b.quantity_remaining),
+                                    reason: isExpired ? 'Expired' : 'Spoiled',
+                                  })
+                                }
+                                title="Discard (write off) this batch"
+                                aria-label={`Discard ${b.batch_code}`}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
 
-                      <div style={styles.idCol}>
+                      {/* Quantity & Progress */}
+                      <div style={styles.qtyRow}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                          <span style={styles.qtyLabel}>Remaining stock</span>
+                          <span style={styles.qty}>
+                            {formatQty(b.quantity_remaining)}
+                            <span style={styles.qtyOf}> / {formatQty(b.quantity_received)} {g.unit}</span>
+                          </span>
+                        </div>
+                        <div style={styles.bar} aria-hidden>
+                          <div style={{ ...styles.barFill, width: `${pct}%`, background: isExpired ? '#FF4D4D' : isNext ? '#f97316' : tone.color }} />
+                        </div>
+                      </div>
+
+                      {/* Expiry Pill, Calendar Date & Origin */}
+                      <div style={styles.expiryRow}>
                         {isEditing ? (
-                          <input
-                            className="glass-input"
-                            value={editing.code}
-                            maxLength={60}
-                            onChange={(e) => setEditing({ ...editing, code: e.target.value })}
-                            style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'ui-monospace, monospace', fontSize: '0.8rem' }}
-                            aria-label="Batch ID"
-                          />
+                          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <label style={{ fontSize: '0.72rem', color: '#94A3B8' }}>Expiry date:</label>
+                            <input
+                              type="date"
+                              className="glass-input"
+                              value={editing.expiry}
+                              onChange={(e) => setEditing({ ...editing, expiry: e.target.value })}
+                              style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.82rem', padding: '4px 8px' }}
+                              aria-label="Expiry date"
+                            />
+                          </div>
                         ) : (
-                          <code style={styles.code}>{b.batch_code}</code>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '6px' }}>
+                            <span
+                              style={{
+                                ...styles.statusPill,
+                                color: isExpired ? '#FFFFFF' : tone.color,
+                                background: isExpired ? '#FF4D4D' : tone.bg,
+                                borderColor: isExpired ? '#FF4D4D' : tone.border,
+                              }}
+                            >
+                              {expiryLabel(b.days_left)}
+                            </span>
+                            <span style={styles.metaExpiry}>
+                              <CalendarClock size={12} style={{ verticalAlign: '-1px', marginRight: 4, color: isExpired ? '#FF4D4D' : '#94a3b8' }} />
+                              {formatExpiry(b.expiry_date)}
+                            </span>
+                          </div>
                         )}
-                        <span style={styles.meta}>
+
+                        <span style={styles.metaOrigin}>
                           {b.source === 'opening'
                             ? 'Opening stock'
                             : b.source === 'adjustment'
-                              ? 'Manual stock adjustment'
+                              ? 'Manual adjustment'
                               : `Received ${received ? received.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}`}
                           {b.received_by ? ` · ${b.received_by}` : ''}
                           {b.supplier ? ` · ${b.supplier}` : ''}
                         </span>
-                      </div>
-
-                      <div style={styles.qtyCol}>
-                        <span style={styles.qty}>
-                          {formatQty(b.quantity_remaining)}
-                          <span style={styles.qtyOf}> / {formatQty(b.quantity_received)} {g.unit}</span>
-                        </span>
-                        <div style={styles.bar} aria-hidden>
-                          <div style={{ ...styles.barFill, width: `${pct}%`, background: tone.color }} />
-                        </div>
-                      </div>
-
-                      <div style={styles.expiryCol}>
-                        {isEditing ? (
-                          <input
-                            type="date"
-                            className="glass-input"
-                            value={editing.expiry}
-                            onChange={(e) => setEditing({ ...editing, expiry: e.target.value })}
-                            style={{ width: '100%', boxSizing: 'border-box', fontSize: '0.8rem' }}
-                            aria-label="Expiry date"
-                          />
-                        ) : (
-                          <>
-                            <span style={{ ...styles.statusPill, color: tone.color, background: tone.bg, borderColor: tone.border }}>
-                              {expiryLabel(b.days_left)}
-                            </span>
-                            <span style={styles.meta}>
-                              <CalendarClock size={11} style={{ verticalAlign: '-1px', marginRight: 3 }} />
-                              {formatExpiry(b.expiry_date)}
-                            </span>
-                          </>
-                        )}
-                      </div>
-
-                      <div style={styles.actionCol}>
-                        {isEditing ? (
-                          <>
-                            <button type="button" style={{ ...styles.actionBtn, color: '#10b981' }} onClick={saveEdit} disabled={busy} title="Save">
-                              <Check size={15} />
-                            </button>
-                            <button type="button" style={styles.actionBtn} onClick={() => setEditing(null)} title="Cancel">
-                              <X size={15} />
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            {b.expiry_status === 'unknown' && (
-                              <button
-                                type="button"
-                                style={{ ...styles.textAction, color: '#f59e0b' }}
-                                onClick={() => setEditing({ id: b.id, code: b.batch_code, expiry: '' })}
-                              >
-                                Add expiry
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              style={styles.actionBtn}
-                              onClick={() => setEditing({ id: b.id, code: b.batch_code, expiry: b.expiry_date || '' })}
-                              title="Edit batch ID or expiry"
-                              aria-label={`Edit ${b.batch_code}`}
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              style={{ ...styles.actionBtn, color: b.expiry_status === 'expired' ? '#ef4444' : 'var(--text-muted)' }}
-                              onClick={() =>
-                                setDiscarding({
-                                  batch: b,
-                                  quantity: formatQty(b.quantity_remaining),
-                                  reason: b.expiry_status === 'expired' ? 'Expired' : 'Spoiled',
-                                })
-                              }
-                              title="Discard (write off) this batch"
-                              aria-label={`Discard ${b.batch_code}`}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </>
-                        )}
                       </div>
                     </li>
                   );
@@ -327,7 +387,7 @@ export const BatchQueue: React.FC<BatchQueueProps> = ({
         <div style={styles.overlay} onClick={() => !busy && setDiscarding(null)}>
           <div style={styles.modal} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="discard-title">
             <h4 id="discard-title" style={styles.modalTitle}>
-              <Trash2 size={18} color="#ef4444" /> Discard batch
+              <Trash2 size={18} color="#FF4D4D" /> Discard batch
             </h4>
             <p style={styles.modalText}>
               <code style={styles.code}>{discarding.batch.batch_code}</code> · {discarding.batch.ingredient_name}
@@ -336,23 +396,17 @@ export const BatchQueue: React.FC<BatchQueueProps> = ({
               {expiryLabel(discarding.batch.days_left).toLowerCase()}
             </p>
 
-            <label style={styles.modalLabel}>Quantity to discard</label>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <input
-                type="number"
-                step="any"
-                min="0"
-                max={discarding.batch.quantity_remaining}
-                className="glass-input"
-                value={discarding.quantity}
-                onChange={(e) => setDiscarding({ ...discarding, quantity: e.target.value })}
-                style={{ width: '100%', boxSizing: 'border-box', paddingRight: '44px' }}
-                autoFocus
-              />
-              <span style={{ position: 'absolute', right: 12, fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                {discarding.batch.ingredient_unit}
-              </span>
-            </div>
+            <label style={styles.modalLabel}>Quantity to write off</label>
+            <input
+              type="number"
+              step="any"
+              min="0"
+              max={discarding.batch.quantity_remaining}
+              className="glass-input"
+              value={discarding.quantity}
+              onChange={(e) => setDiscarding({ ...discarding, quantity: e.target.value })}
+              style={{ width: '100%', boxSizing: 'border-box' }}
+            />
 
             <label style={styles.modalLabel}>Reason</label>
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -364,7 +418,7 @@ export const BatchQueue: React.FC<BatchQueueProps> = ({
                   onClick={() => setDiscarding({ ...discarding, reason: r })}
                   style={{
                     ...styles.filterChip,
-                    ...(discarding.reason === r ? { background: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.4)', color: '#ef4444' } : {}),
+                    ...(discarding.reason === r ? { background: 'rgba(255,77,77,0.18)', borderColor: '#FF4D4D', color: '#FF4D4D' } : {}),
                   }}
                 >
                   {r}
@@ -389,7 +443,7 @@ export const BatchQueue: React.FC<BatchQueueProps> = ({
                   !(parseFloat(discarding.quantity) > 0) ||
                   parseFloat(discarding.quantity) > discarding.batch.quantity_remaining + 1e-6
                 }
-                style={{ background: '#ef4444', borderColor: '#ef4444', color: '#fff' }}
+                style={{ background: '#FF4D4D', borderColor: '#FF4D4D', color: '#fff' }}
               >
                 <Trash2 size={14} />
                 <span>{busy ? 'Discarding…' : 'Discard'}</span>
@@ -403,19 +457,30 @@ export const BatchQueue: React.FC<BatchQueueProps> = ({
 };
 
 const styles = {
-  card: { padding: '24px', display: 'flex', flexDirection: 'column' as const, textAlign: 'left' as const },
+  card: {
+    padding: '24px',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    textAlign: 'left' as const,
+    background: '#121212',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '16px',
+    boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.5)',
+  },
   cardHeader: {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '8px',
-    borderBottom: '1px solid var(--border-glass)',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
     paddingBottom: '16px',
     marginBottom: '16px',
   },
-  cardTitle: { margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)' },
-  headerDesc: { fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.45 },
+  cardTitle: { margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#FFFFFF' },
+  headerDesc: { fontSize: '0.75rem', color: '#94A3B8', lineHeight: 1.45 },
   searchBox: { position: 'relative' as const, display: 'flex', alignItems: 'center', flex: '0 1 260px', minWidth: '180px' },
-  searchIcon: { position: 'absolute' as const, left: '10px', color: 'var(--text-muted)', pointerEvents: 'none' as const },
+  searchIcon: { position: 'absolute' as const, left: '10px', color: '#94A3B8', pointerEvents: 'none' as const },
   filterRow: { display: 'flex', gap: '6px', flexWrap: 'wrap' as const, marginTop: '4px' },
   filterChip: {
     display: 'inline-flex',
@@ -425,63 +490,254 @@ const styles = {
     fontWeight: 600,
     padding: '6px 10px',
     borderRadius: '999px',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
     background: 'transparent',
-    color: 'var(--text-muted)',
+    color: '#94A3B8',
     cursor: 'pointer',
   },
   filterCount: { fontWeight: 800, opacity: 0.85 },
   dot: { width: 7, height: 7, borderRadius: '50%', display: 'inline-block' },
-  groupList: { display: 'flex', flexDirection: 'column' as const, gap: '18px' },
-  group: { display: 'flex', flexDirection: 'column' as const, gap: '8px' },
-  groupHead: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px' },
-  groupName: { fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)' },
-  groupMeta: { fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' as const, letterSpacing: '0.05em' },
-  groupTotal: { fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' as const },
-  batchList: { listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' as const, gap: '6px' },
+  groupList: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+    gap: '18px',
+    width: '100%',
+    alignItems: 'start',
+    boxSizing: 'border-box' as const,
+  },
+  groupCard: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '14px',
+    background: 'rgba(18, 18, 22, 0.7)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '14px',
+    padding: '16px',
+    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)',
+    boxSizing: 'border-box' as const,
+    minWidth: 0,
+    transition: 'border-color 0.2s ease, transform 0.2s ease',
+  },
+  groupHead: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: '10px',
+    paddingBottom: '12px',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+  },
+  groupName: {
+    fontSize: '1.1rem',
+    fontWeight: 800,
+    color: '#FFFFFF',
+    letterSpacing: '-0.01em',
+    lineHeight: 1.25,
+    wordBreak: 'break-word' as const,
+  },
+  groupMeta: {
+    fontSize: '0.7rem',
+    fontWeight: 700,
+    color: '#94A3B8',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.06em',
+  },
+  groupTotal: {
+    fontSize: '0.82rem',
+    fontWeight: 700,
+    color: '#FFFFFF',
+    whiteSpace: 'nowrap' as const,
+    background: 'rgba(255, 255, 255, 0.06)',
+    padding: '4px 10px',
+    borderRadius: '20px',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+  },
+  expiredBadgeTotal: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    fontSize: '0.7rem',
+    color: '#FF4D4D',
+    fontWeight: 700,
+  },
+  batchList: {
+    listStyle: 'none',
+    margin: 0,
+    padding: 0,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '10px',
+  },
   batch: {
     display: 'flex',
-    flexWrap: 'wrap' as const,
-    alignItems: 'center',
-    gap: '10px 16px',
-    padding: '10px 12px',
+    flexDirection: 'column' as const,
+    gap: '10px',
+    padding: '12px 14px',
     borderRadius: '10px',
-    border: '1px solid',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    boxSizing: 'border-box' as const,
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.25)',
   },
-  rankCol: { flex: '0 0 112px' },
-  rankPill: {
+  batchTopRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  rankPillExpired: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '4px',
     fontSize: '0.7rem',
     fontWeight: 800,
-    padding: '4px 9px',
+    padding: '3px 8px',
     borderRadius: '999px',
-    border: '1px solid',
+    border: '1px solid #FF4D4D',
+    background: '#FF4D4D',
+    color: '#FFFFFF',
+    whiteSpace: 'nowrap' as const,
+    letterSpacing: '0.02em',
+    boxShadow: '0 2px 8px rgba(255, 77, 77, 0.35)',
+    flexShrink: 0,
+  },
+  rankPillNext: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    fontSize: '0.7rem',
+    fontWeight: 800,
+    padding: '3px 8px',
+    borderRadius: '999px',
+    border: '1px solid #f97316',
+    background: '#f97316',
+    color: '#FFFFFF',
+    whiteSpace: 'nowrap' as const,
+    boxShadow: '0 2px 8px rgba(249, 115, 22, 0.35)',
+    flexShrink: 0,
+  },
+  rankNum: {
+    fontSize: '0.8rem',
+    fontWeight: 800,
+    color: '#94A3B8',
+    padding: '2px 6px',
+    borderRadius: '6px',
+    background: 'rgba(255, 255, 255, 0.05)',
+    flexShrink: 0,
+  },
+  code: {
+    fontFamily: 'ui-monospace, monospace',
+    fontSize: '0.82rem',
+    fontWeight: 800,
+    color: '#FFFFFF',
+    wordBreak: 'break-all' as const,
+  },
+  actionCol: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    flexShrink: 0,
+  },
+  actionBtn: {
+    background: 'rgba(255, 255, 255, 0.08)',
+    border: '1px solid rgba(255, 255, 255, 0.14)',
+    color: '#E2E8F0',
+    cursor: 'pointer',
+    padding: '5px 7px',
+    borderRadius: '6px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.15s ease',
+  },
+  actionBtnDiscard: {
+    background: 'rgba(255, 77, 77, 0.14)',
+    border: '1px solid #FF4D4D',
+    color: '#FF4D4D',
+    cursor: 'pointer',
+    padding: '5px 7px',
+    borderRadius: '6px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.15s ease',
+  },
+  textAction: {
+    background: 'rgba(200, 157, 102, 0.16)',
+    border: '1px solid rgba(200, 157, 102, 0.4)',
+    color: '#C89D66',
+    fontSize: '0.72rem',
+    fontWeight: 700,
+    cursor: 'pointer',
+    padding: '4px 8px',
+    borderRadius: '6px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    transition: 'all 0.15s ease',
     whiteSpace: 'nowrap' as const,
   },
-  rankNum: { fontSize: '0.82rem', fontWeight: 800, color: 'var(--text-muted)', paddingLeft: '8px' },
-  idCol: { flex: '1 1 180px', display: 'flex', flexDirection: 'column' as const, gap: '2px', minWidth: 0 },
-  code: { fontFamily: 'ui-monospace, monospace', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', wordBreak: 'break-all' as const },
-  meta: { fontSize: '0.7rem', color: 'var(--text-muted)' },
-  qtyCol: { flex: '0 1 140px', display: 'flex', flexDirection: 'column' as const, gap: '4px' },
-  qty: { fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)' },
-  qtyOf: { fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)' },
-  bar: { height: 4, borderRadius: 4, background: 'var(--border-glass)', overflow: 'hidden' },
-  barFill: { height: '100%', borderRadius: 4 },
-  expiryCol: { flex: '1 1 170px', display: 'flex', flexDirection: 'column' as const, gap: '3px', alignItems: 'flex-start' },
-  statusPill: { fontSize: '0.72rem', fontWeight: 700, padding: '3px 9px', borderRadius: '999px', border: '1px solid' },
-  actionCol: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: '2px', marginLeft: 'auto' },
-  actionBtn: {
-    background: 'transparent',
-    border: 'none',
-    color: 'var(--text-muted)',
-    cursor: 'pointer',
-    padding: '6px',
-    borderRadius: '6px',
+  qtyRow: {
     display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '4px',
   },
-  textAction: { background: 'none', border: 'none', fontSize: '0.74rem', fontWeight: 700, cursor: 'pointer', padding: '4px 6px' },
+  qtyLabel: {
+    fontSize: '0.72rem',
+    color: '#94A3B8',
+    fontWeight: 600,
+  },
+  qty: {
+    fontSize: '0.88rem',
+    fontWeight: 800,
+    color: '#FFFFFF',
+  },
+  qtyOf: {
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    color: '#94A3B8',
+  },
+  bar: {
+    height: 5,
+    borderRadius: 4,
+    background: 'rgba(255, 255, 255, 0.12)',
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    borderRadius: 4,
+    transition: 'width 0.3s ease',
+  },
+  expiryRow: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '4px',
+    paddingTop: '6px',
+    borderTop: '1px dashed rgba(255, 255, 255, 0.06)',
+  },
+  statusPill: {
+    fontSize: '0.72rem',
+    fontWeight: 700,
+    padding: '3px 8px',
+    borderRadius: '999px',
+    border: '1px solid',
+    display: 'inline-flex',
+    alignItems: 'center',
+  },
+  metaExpiry: {
+    fontSize: '0.72rem',
+    color: '#CBD5E1',
+    fontWeight: 600,
+    display: 'inline-flex',
+    alignItems: 'center',
+  },
+  metaOrigin: {
+    fontSize: '0.68rem',
+    color: '#94A3B8',
+    fontWeight: 500,
+    lineHeight: 1.3,
+  },
   emptyState: {
     display: 'flex',
     flexDirection: 'column' as const,
@@ -489,33 +745,33 @@ const styles = {
     justifyContent: 'center',
     gap: '8px',
     minHeight: '160px',
-    color: 'var(--text-muted)',
+    color: '#94A3B8',
     fontSize: '0.85rem',
     textAlign: 'center' as const,
   },
   overlay: {
     position: 'fixed' as const,
     inset: 0,
-    background: 'var(--modal-overlay, rgba(0,0,0,0.5))',
+    background: 'rgba(0,0,0,0.65)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,
     padding: '16px',
-    backdropFilter: 'blur(4px)',
+    backdropFilter: 'blur(6px)',
   },
   modal: {
     width: '100%',
     maxWidth: '420px',
-    background: 'var(--dropdown-bg, var(--card-bg, #fff))',
-    color: 'var(--text-primary)',
-    border: '1px solid var(--border-glass)',
+    background: '#121212',
+    color: '#FFFFFF',
+    border: '1px solid rgba(255, 255, 255, 0.14)',
     borderRadius: '16px',
-    padding: '22px',
-    boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+    padding: '24px',
+    boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
     textAlign: 'left' as const,
   },
-  modalTitle: { margin: '0 0 8px', fontSize: '1.05rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' },
-  modalText: { margin: '0 0 12px', fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.5 },
-  modalLabel: { display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', margin: '12px 0 6px' },
+  modalTitle: { margin: '0 0 8px', fontSize: '1.1rem', fontWeight: 800, color: '#FFFFFF', display: 'flex', alignItems: 'center', gap: '8px' },
+  modalText: { margin: '0 0 12px', fontSize: '0.85rem', color: '#CBD5E1', lineHeight: 1.5 },
+  modalLabel: { display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#CBD5E1', margin: '12px 0 6px' },
 };

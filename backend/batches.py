@@ -39,13 +39,16 @@ def parse_expiry(value):
 
 def _usable_order_key(today):
     def key(b):
-        if b.expiry_date is None:
-            group = 0
-        elif b.expiry_date >= today:
-            group = 1
+        # 0. Active unexpired batches with expiry date: earliest expiry date first (FEFO)
+        # 1. Active batches with no expiry date: oldest received_at first (FIFO)
+        # 2. Expired batches last (never consumed for orders)
+        if b.expiry_date is not None:
+            if b.expiry_date >= today:
+                return (0, b.expiry_date, b.received_at or datetime.min, b.id or 0)
+            else:
+                return (2, b.expiry_date, b.received_at or datetime.min, b.id or 0)
         else:
-            group = 2
-        return (group, b.expiry_date or date.min, b.received_at or datetime.min, b.id or 0)
+            return (1, date.max, b.received_at or datetime.min, b.id or 0)
     return key
 
 
@@ -65,8 +68,11 @@ def _take_from_batches(ingredient, qty, today):
     for batch in fefo_order(active_batches(ingredient), today):
         if remaining <= EPS:
             break
+        # Do not draw from expired batches
+        if batch.expiry_date is not None and batch.expiry_date < today:
+            continue
         take = min(batch.quantity_remaining, remaining)
-        batch.quantity_remaining -= take
+        batch.quantity_remaining = round(batch.quantity_remaining - take, 6)
         remaining -= take
 
 
@@ -85,14 +91,29 @@ def _adjustment_batch(ingredient, qty, source='adjustment', by=None):
     return batch
 
 
+def recalculate_stock(ingredient, today=None):
+    """Recalculate ingredient.stock_level from all non-expired, active batch quantities."""
+    today = today or store_today()
+    if ingredient.batches:
+        valid_total = sum(
+            float(b.quantity_remaining or 0)
+            for b in ingredient.batches
+            if b.disposed_at is None
+            and (b.quantity_remaining or 0) > EPS
+            and (b.expiry_date is None or b.expiry_date >= today)
+        )
+        ingredient.stock_level = round(max(0.0, valid_total), 6)
+    return float(ingredient.stock_level or 0)
+
+
 def consume(ingredient, qty, today=None):
     """Deduct qty from the ingredient (clamped at 0), drawing from batches FEFO."""
     qty = max(0.0, float(qty or 0))
     if qty <= EPS:
         return
     today = today or store_today()
-    ingredient.stock_level = max(0.0, float(ingredient.stock_level or 0) - qty)
     _take_from_batches(ingredient, qty, today)
+    recalculate_stock(ingredient, today)
 
 
 def restore(ingredient, qty, today=None):
@@ -101,7 +122,6 @@ def restore(ingredient, qty, today=None):
     if qty <= EPS:
         return
     today = today or store_today()
-    ingredient.stock_level = float(ingredient.stock_level or 0) + qty
     left = qty
     candidates = [
         b for b in ingredient.batches
@@ -118,17 +138,24 @@ def restore(ingredient, qty, today=None):
         left -= give
     if left > EPS:
         _adjustment_batch(ingredient, left)
+    recalculate_stock(ingredient, today)
 
 
 def reconcile(ingredient, by=None, today=None):
     """Make the active batches add up to stock_level after it was set directly (manual edit, new ingredient)."""
     today = today or store_today()
-    tracked = sum(b.quantity_remaining for b in active_batches(ingredient))
+    tracked = sum(
+        b.quantity_remaining for b in ingredient.batches
+        if b.disposed_at is None
+        and (b.quantity_remaining or 0) > EPS
+        and (b.expiry_date is None or b.expiry_date >= today)
+    )
     diff = float(ingredient.stock_level or 0) - tracked
     if diff > 1e-6:
         _adjustment_batch(ingredient, diff, by=by)
     elif diff < -1e-6:
         _take_from_batches(ingredient, -diff, today)
+    recalculate_stock(ingredient, today)
 
 
 def _code_prefix(name):
@@ -136,13 +163,13 @@ def _code_prefix(name):
     if not words:
         return 'LOT'
     if len(words) == 1:
-        return words[0][:3].upper()
+        return words[0][:2].upper() if len(words[0]) >= 2 else words[0].upper()
     return ''.join(w[0] for w in words[:3]).upper()
 
 
 def next_batch_code(ingredient, prefix=None, taken=None):
-    """e.g. WM-261011-01 for Whole Milk received on 2026-10-11."""
-    stem = f'{prefix or _code_prefix(ingredient.name)}-{store_today():%y%m%d}-'
+    """e.g. WM-20261012-01 for Whole Milk received on 2026-10-12."""
+    stem = f'{prefix or _code_prefix(ingredient.name)}-{store_today():%Y%m%d}-'
     existing = {b.batch_code.upper() for b in ingredient.batches} | {c.upper() for c in (taken or ())}
     n = 1
     while f'{stem}{n:02d}'.upper() in existing:
@@ -213,7 +240,8 @@ def ensure_batch_schema():
             _adjustment_batch(ing, float(ing.stock_level), source='opening')
         else:
             reconcile(ing, today=today)
-        changed = changed or len(ing.batches) != before
+        recalculate_stock(ing, today)
+        changed = True
     if changed:
         db.session.commit()
 
@@ -268,8 +296,9 @@ def update_batch(id):
             batch.expiry_date = parse_expiry(data.get('expiry_date'))
         except ValueError as exc:
             return jsonify({'error': str(exc)}), 400
-    db.session.commit()
     today = store_today()
+    recalculate_stock(batch.ingredient, today)
+    db.session.commit()
     payload = _batches_payload([b for b in batch.ingredient.batches], today)
     return jsonify(next(p for p in payload if p['id'] == batch.id))
 
@@ -295,7 +324,6 @@ def discard_batch(id):
     reason = (data.get('reason') or 'Expired').strip()[:255]
 
     ing = batch.ingredient
-    ing.stock_level = max(0.0, float(ing.stock_level or 0) - qty)
     batch.quantity_remaining = round(left - qty, 6)
     batch.disposed_quantity = round((batch.disposed_quantity or 0) + qty, 6)
     batch.disposed_reason = reason
@@ -303,7 +331,8 @@ def discard_batch(id):
     if batch.quantity_remaining <= EPS:
         batch.quantity_remaining = 0.0
         batch.disposed_at = datetime.utcnow()
+    today = store_today()
+    recalculate_stock(ing, today)
     db.session.commit()
     safe_check_low_stock()
-    today = store_today()
     return jsonify(batch.to_dict(today))

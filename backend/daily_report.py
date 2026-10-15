@@ -305,7 +305,25 @@ def build_report(settings, close_local):
         'reviews_avg': (sum(r.rating for r in reviews) / len(reviews)) if reviews else None,
         'insights': insights,
         'conclusion': conclusion,
+        'ai_outlook': _ai_outlook(),
     }
+
+
+AI_OUTLOOK_MAX_AGE = timedelta(hours=36)
+AI_KIND_LABELS = {
+    'selling_well': 'Selling well', 'slowing_down': 'Slowing down', 'stock_up': 'Stock up',
+    'use_soon': 'Use soon', 'promote': 'Promote', 'menu_idea': 'Menu idea', 'heads_up': 'Heads-up',
+}
+
+
+def _ai_outlook():
+    """Summary and top suggestions from the latest AI insights run, if one finished recently."""
+    from insights import latest_succeeded  # late import: insights imports this module
+    run = latest_succeeded(max_age=AI_OUTLOOK_MAX_AGE)
+    if not run:
+        return None
+    data = run.to_dict()
+    return {'summary': data['summary'], 'insights': data['insights'][:4]}
 
 
 def report_summary(report) -> dict:
@@ -392,6 +410,19 @@ def render_report(report):
         f'<td style="font-size:14px;line-height:1.5;">{escape(text)}</td></tr></table>'
         for tone, text in report['insights']
     )
+
+    outlook = report.get('ai_outlook')
+    if outlook:
+        body += section('AI outlook for the week ahead')
+        if outlook['summary']:
+            body += f'<p style="font-size:14px;line-height:1.6;margin:0 0 10px;">{escape(outlook["summary"])}</p>'
+        body += ''.join(
+            f'<p style="font-size:14px;line-height:1.5;margin:0 0 8px;"><b>{escape(AI_KIND_LABELS.get(i["kind"], "Note"))}: '
+            f'{escape(i["title"])}.</b> {escape(i["action"])}</p>'
+            for i in outlook['insights']
+        )
+        body += (f'<p style="font-size:12px;color:{MUTED};margin:4px 0 0;">Suggestions from Claude, based on your sales, '
+                 f'stock, the weather and local news. Full details in Sales Insights.</p>')
 
     products = sorted(t['products'].items(), key=lambda kv: kv[1]['sales'], reverse=True)
     if products:

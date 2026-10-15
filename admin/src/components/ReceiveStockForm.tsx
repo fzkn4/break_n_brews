@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Plus, Truck, Trash2, CalendarClock, Hash, AlertTriangle, Layers, Info } from 'lucide-react';
+import { Archive, Plus, Trash2, CalendarClock, Hash, AlertTriangle, Layers, Info, X } from 'lucide-react';
 import type { Ingredient, StockBatch, StockInPayload } from '../types';
 import {
   addDaysInput, daysUntil, expiryLabel, formatExpiry, formatQty, statusForDays, todayInput, EXPIRY_TONE,
@@ -20,13 +20,28 @@ interface ReceiveStockFormProps {
   ingredients: Ingredient[];
   batches: StockBatch[];
   /** Admin enters the invoice cost; staff may leave it blank to value the stock at the current unit cost. */
-  costRequired: boolean;
+  costRequired?: boolean;
   receivedBy: string | null;
   prefill?: StockInPrefill | null;
   onSubmit: (payload: StockInPayload) => Promise<boolean>;
   onSubmitted?: (prefill: StockInPrefill | null) => void;
+  onCreateIngredient?: (data: any) => Promise<Ingredient | null>;
   cardClassName?: string;
 }
+
+const ALL_CATEGORIES = [
+  'Dairy',
+  'Coffee Beans',
+  'Syrups',
+  'Packaging',
+  'Beverages',
+  'Meat',
+  'Pastries',
+  'Grains',
+  'Sweeteners',
+];
+
+const ALL_UNITS = ['kg', 'mg', 'L', 'ml', 'pcs'];
 
 interface BatchRow {
   uid: number;
@@ -35,8 +50,25 @@ interface BatchRow {
   expiry: string;
 }
 
+const CATEGORY_LIFESPAN_DAYS: Record<string, number> = {
+  Dairy: 7,
+  Meat: 5,
+  Pastries: 14,
+  'Coffee Beans': 60,
+  Syrups: 90,
+  Packaging: 365,
+  Beverages: 180,
+  Grains: 180,
+  Sweeteners: 365,
+};
+
+const getCalculatedLifespan = (ing?: Ingredient | null): number => {
+  if (!ing) return 30;
+  return ing.lifespan_days ?? CATEGORY_LIFESPAN_DAYS[ing.category] ?? 30;
+};
+
 let rowSeq = 0;
-const newRow = (quantity = ''): BatchRow => ({ uid: ++rowSeq, quantity, batchCode: '', expiry: '' });
+const newRow = (quantity = '', expiry = ''): BatchRow => ({ uid: ++rowSeq, quantity, batchCode: '', expiry });
 
 const QUICK_PICKS: { label: string; days: number }[] = [
   { label: '+1 wk', days: 7 },
@@ -48,11 +80,12 @@ const QUICK_PICKS: { label: string; days: number }[] = [
 export const ReceiveStockForm: React.FC<ReceiveStockFormProps> = ({
   ingredients,
   batches,
-  costRequired,
+  costRequired = false,
   receivedBy,
   prefill,
   onSubmit,
   onSubmitted,
+  onCreateIngredient,
   cardClassName = 'glass-card',
 }) => {
   const [ingredientId, setIngredientId] = useState('');
@@ -67,10 +100,67 @@ export const ReceiveStockForm: React.FC<ReceiveStockFormProps> = ({
   const firstExpiryRef = useRef<HTMLInputElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
 
+  // In-place ingredient creation state
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [newIngName, setNewIngName] = useState('');
+  const [newIngCategory, setNewIngCategory] = useState('Dairy');
+  const [newIngUnit, setNewIngUnit] = useState('L');
+  const [newIngReorder, setNewIngReorder] = useState('5');
+  const [newIngLifespan, setNewIngLifespan] = useState('7');
+  const [newIngCost, setNewIngCost] = useState('');
+  const [creatingIng, setCreatingIng] = useState(false);
+  const [newIngError, setNewIngError] = useState('');
+
+  const handleCategorySelect = (cat: string) => {
+    setNewIngCategory(cat);
+    const defaultDays = CATEGORY_LIFESPAN_DAYS[cat] ?? 30;
+    setNewIngLifespan(String(defaultDays));
+    if (cat === 'Packaging') setNewIngUnit('pcs');
+    else if (cat === 'Coffee Beans') setNewIngUnit('kg');
+    else if (cat === 'Dairy') setNewIngUnit('L');
+    else if (cat === 'Beverages') setNewIngUnit('pcs');
+  };
+
+  const handleSaveNewIngredient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newIngName.trim()) {
+      setNewIngError('Ingredient name is required');
+      return;
+    }
+    if (!onCreateIngredient) return;
+    setCreatingIng(true);
+    setNewIngError('');
+    try {
+      const lifespan = parseInt(newIngLifespan, 10);
+      const created = await onCreateIngredient({
+        name: newIngName.trim(),
+        category: newIngCategory,
+        unit: newIngUnit,
+        reorder_point: parseFloat(newIngReorder) || 5.0,
+        cost_per_unit: parseFloat(newIngCost) || 0.0,
+        lifespan_days: isNaN(lifespan) ? (CATEGORY_LIFESPAN_DAYS[newIngCategory] ?? 30) : lifespan,
+        stock_level: 0.0,
+      });
+      setCreatingIng(false);
+      if (created) {
+        setShowNewModal(false);
+        setNewIngName('');
+        setNewIngCost('');
+        // Automatically select the newly created ingredient and auto-calculate its expiry date!
+        handleIngredientChange(String(created.id));
+      }
+    } catch (err: any) {
+      setCreatingIng(false);
+      setNewIngError(err?.message || 'Failed to create ingredient');
+    }
+  };
+
   useEffect(() => {
     if (!prefill) return;
     setIngredientId(String(prefill.ingredientId));
-    setRows([newRow(String(prefill.quantity))]);
+    const target = ingredients.find((i) => i.id === prefill.ingredientId);
+    const autoExpiry = target ? addDaysInput(getCalculatedLifespan(target)) : '';
+    setRows([newRow(String(prefill.quantity), autoExpiry)]);
     setCost(prefill.cost ?? '');
     setSupplier(prefill.supplier ?? '');
     setInvoiceNumber(prefill.invoiceNumber ?? '');
@@ -78,10 +168,7 @@ export const ReceiveStockForm: React.FC<ReceiveStockFormProps> = ({
     setTriedSubmit(false);
     setKeptDelivery(false);
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    // The one thing a request cannot tell us is the expiry date, so put the cursor there.
     setTimeout(() => firstExpiryRef.current?.focus(), 350);
-    // Re-fill only when a new prefill is issued, not when the parent re-renders the same one.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill?.key]);
 
   const selected = ingredients.find((i) => i.id === Number(ingredientId));
@@ -103,11 +190,13 @@ export const ReceiveStockForm: React.FC<ReceiveStockFormProps> = ({
     const mine = batches.filter((b) => b.ingredient_id === selected.id && b.state === 'active');
     const next = mine.filter((b) => b.use_rank !== null).sort((a, b) => (a.use_rank ?? 0) - (b.use_rank ?? 0))[0];
     const expired = mine.filter((b) => b.expiry_status === 'expired');
-    return { count: mine.length, next, expired };
+    const usableTotal = mine.length > 0
+      ? mine.filter((b) => b.expiry_status !== 'expired').reduce((s, b) => s + (b.quantity_remaining || 0), 0)
+      : (selected.stock_level || 0);
+    return { count: mine.length, next, expired, usableTotal };
   }, [selected, batches]);
 
   const totalQty = rows.reduce((sum, r) => sum + (parseFloat(r.quantity) || 0), 0);
-  const estimatedCost = selected ? selected.cost_per_unit * totalQty : 0;
 
   const rowErrors = rows.map((r) => {
     const errs: { quantity?: string; expiry?: string } = {};
@@ -141,13 +230,27 @@ export const ReceiveStockForm: React.FC<ReceiveStockFormProps> = ({
   const updateRow = (uid: number, patch: Partial<BatchRow>) =>
     setRows((prev) => prev.map((r) => (r.uid === uid ? { ...r, ...patch } : r)));
 
+  const handleIngredientChange = (newId: string) => {
+    setIngredientId(newId);
+    const target = ingredients.find((i) => i.id === Number(newId));
+    if (target) {
+      const lifespan = getCalculatedLifespan(target);
+      const autoExpiry = addDaysInput(lifespan);
+      setRows((prev) =>
+        prev.map((r) => ({
+          ...r,
+          expiry: autoExpiry,
+        }))
+      );
+    }
+  };
+
   const resetAfterSave = () => {
     setIngredientId('');
     setRows([newRow()]);
     setCost('');
     setActivePrefill(null);
     setTriedSubmit(false);
-    // A delivery usually brings several ingredients: keep who it came from for the next one.
     setKeptDelivery(Boolean(supplier.trim() || invoiceNumber.trim()));
   };
 
@@ -181,8 +284,8 @@ export const ReceiveStockForm: React.FC<ReceiveStockFormProps> = ({
     <div style={styles.card} className={cardClassName}>
       <div style={styles.cardHeader}>
         <div style={styles.headerTitleGroup}>
-          <Archive size={20} color="#f59e0b" />
-          <h3 style={styles.cardTitle}>Receive Stock</h3>
+          <Archive size={20} color="#C89D66" />
+          <h3 style={styles.cardTitle}>Stock In</h3>
         </div>
         <span style={styles.headerDesc}>
           Log a delivery batch by batch. Each batch keeps its own ID and expiry date, and stock is always used
@@ -204,33 +307,64 @@ export const ReceiveStockForm: React.FC<ReceiveStockFormProps> = ({
 
         <div style={styles.inputGroup}>
           <label style={styles.label} htmlFor="rs-ingredient">Ingredient</label>
-          <select
-            id="rs-ingredient"
-            className="glass-input"
-            value={ingredientId}
-            onChange={(e) => setIngredientId(e.target.value)}
-            style={{ width: '100%' }}
-          >
-            <option value="" disabled>Choose what arrived…</option>
-            {groupedIngredients.map(([category, list]) => (
-              <optgroup key={category} label={category}>
-                {list.map((ing) => (
-                  <option key={ing.id} value={ing.id}>
-                    {ing.name} · {formatQty(ing.stock_level)} {ing.unit} on hand
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <select
+              id="rs-ingredient"
+              className="glass-input"
+              value={ingredientId}
+              onChange={(e) => {
+                if (e.target.value === '__NEW_INGREDIENT__') {
+                  setShowNewModal(true);
+                  return;
+                }
+                handleIngredientChange(e.target.value);
+              }}
+              style={{ flex: 1 }}
+            >
+              <option value="" disabled>Choose what arrived…</option>
+              {onCreateIngredient && (
+                <option value="__NEW_INGREDIENT__" style={{ fontWeight: 700, color: '#C89D66' }}>
+                  ✨ + Create / Register New Ingredient…
+                </option>
+              )}
+              {groupedIngredients.map(([category, list]) => (
+                <optgroup key={category} label={category}>
+                  {list.map((ing) => {
+                    const ingBatches = batches.filter((b) => b.ingredient_id === ing.id && b.state === 'active');
+                    const usable = ingBatches.length > 0
+                      ? ingBatches.filter((b) => b.expiry_status !== 'expired').reduce((s, b) => s + (b.quantity_remaining || 0), 0)
+                      : ing.stock_level;
+                    return (
+                      <option key={ing.id} value={ing.id}>
+                        {ing.name} · {formatQty(usable)} {ing.unit} on hand
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              ))}
+            </select>
+
+            {onCreateIngredient && (
+              <button
+                type="button"
+                onClick={() => setShowNewModal(true)}
+                style={styles.newItemBtn}
+                title="Register a new ingredient specification"
+              >
+                <Plus size={14} color="#C89D66" />
+                <span>+ New Item</span>
+              </button>
+            )}
+          </div>
           {show(!ingredientId ? 'Choose an ingredient' : undefined)}
 
           {selected && onHand && (
             <div style={styles.onHand}>
-              <Layers size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+              <Layers size={13} style={{ flexShrink: 0, marginTop: 2, color: '#C89D66' }} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span>
-                  <strong>{formatQty(selected.stock_level)} {unit}</strong> on hand in {onHand.count}{' '}
-                  {onHand.count === 1 ? 'batch' : 'batches'}
+                  <strong style={{ color: '#FFFFFF' }}>{formatQty(onHand.usableTotal)} {unit}</strong> on hand in {onHand.count - onHand.expired.length}{' '}
+                  {onHand.count - onHand.expired.length === 1 ? 'batch' : 'batches'}
                   {selected.lifespan_days ? ` · typical shelf life ${selected.lifespan_days} days` : ''}
                 </span>
                 {onHand.next && (
@@ -242,7 +376,7 @@ export const ReceiveStockForm: React.FC<ReceiveStockFormProps> = ({
                   </span>
                 )}
                 {onHand.expired.length > 0 && (
-                  <span style={{ color: EXPIRY_TONE.expired.color, fontWeight: 600 }}>
+                  <span style={{ color: '#FF4D4D', fontWeight: 700 }}>
                     {onHand.expired.length} expired {onHand.expired.length === 1 ? 'batch' : 'batches'} waiting to be
                     discarded
                   </span>
@@ -283,8 +417,8 @@ export const ReceiveStockForm: React.FC<ReceiveStockFormProps> = ({
                   )}
                 </div>
 
-                <div style={styles.inputRow}>
-                  <div style={{ ...styles.inputGroup, flex: '1 1 120px' }}>
+                <div style={styles.batchFieldsGrid}>
+                  <div style={styles.inputGroup}>
                     <label style={styles.subLabel}>Quantity</label>
                     <div style={styles.inputWithSuffix}>
                       <input
@@ -303,13 +437,16 @@ export const ReceiveStockForm: React.FC<ReceiveStockFormProps> = ({
                     {show(errs.quantity)}
                   </div>
 
-                  <div style={{ ...styles.inputGroup, flex: '1 1 160px' }}>
-                    <label style={styles.subLabel}>Batch / Lot ID</label>
+                  <div style={styles.inputGroup}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <label style={styles.subLabel}>Batch / Lot ID</label>
+                      <span style={{ fontSize: '0.66rem', color: '#94A3B8' }}>[Code]-[YYYYMMDD]-[##]</span>
+                    </div>
                     <div style={styles.inputWithPrefix}>
                       <Hash size={13} style={styles.prefixIcon} />
                       <input
                         type="text"
-                        placeholder="Auto-generated if blank"
+                        placeholder={selected ? `Auto: ${selected.name.match(/[A-Za-z0-9]+/g)?.slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'LOT'}-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${String(idx + 1).padStart(2, '0')}` : 'Auto (e.g. WM-20261012-01)'}
                         className="glass-input"
                         value={row.batchCode}
                         maxLength={60}
@@ -319,11 +456,17 @@ export const ReceiveStockForm: React.FC<ReceiveStockFormProps> = ({
                     </div>
                     {dupe && <span style={styles.fieldError}>Same ID used twice in this delivery</span>}
                   </div>
-                </div>
 
-                <div style={styles.inputGroup}>
-                  <label style={styles.subLabel}>Expiry date</label>
-                  <div style={styles.inputWithPrefix}>
+                  <div style={styles.inputGroup}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <label style={styles.subLabel}>Expiry date</label>
+                      {selected && (
+                        <span style={{ fontSize: '0.7rem', color: '#C89D66', fontWeight: 600 }}>
+                          ✨ Auto ({getCalculatedLifespan(selected)}d)
+                        </span>
+                      )}
+                    </div>
+                    <div style={styles.inputWithPrefix}>
                       <CalendarClock size={14} style={styles.prefixIcon} />
                       <input
                         ref={idx === 0 ? firstExpiryRef : undefined}
@@ -336,41 +479,55 @@ export const ReceiveStockForm: React.FC<ReceiveStockFormProps> = ({
                           width: '100%',
                           boxSizing: 'border-box',
                           paddingLeft: '30px',
-                          borderColor: triedSubmit && errs.expiry ? '#ef4444' : undefined,
+                          borderColor: triedSubmit && errs.expiry ? '#FF4D4D' : undefined,
                         }}
                       />
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
+                      {selected ? (
+                        <button
+                          type="button"
+                          style={{
+                            ...styles.chip,
+                            ...styles.chipSuggested,
+                            background: row.expiry === addDaysInput(getCalculatedLifespan(selected)) ? 'rgba(200, 157, 102, 0.2)' : 'rgba(200, 157, 102, 0.08)',
+                          }}
+                          onClick={() => updateRow(row.uid, { expiry: addDaysInput(getCalculatedLifespan(selected)) })}
+                          title={`Reset to default shelf life for ${selected.name}`}
+                        >
+                          ⚡ Default · {getCalculatedLifespan(selected)}d
+                        </button>
+                      ) : null}
+                      {QUICK_PICKS.map((p) => (
+                        <button
+                          key={p.label}
+                          type="button"
+                          style={styles.chip}
+                          onClick={() => updateRow(row.uid, { expiry: addDaysInput(p.days) })}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                    {row.expiry && !errs.expiry ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px' }}>
+                        <span style={{ ...styles.expiryHint, color: days !== null && days < 0 ? '#FF4D4D' : tone.color }}>
+                          {expiryLabel(days)} · {formatExpiry(row.expiry)}
+                        </span>
+                        {selected && (
+                          <span style={{ fontSize: '0.7rem', color: '#94A3B8' }}>
+                            {row.expiry === addDaysInput(getCalculatedLifespan(selected))
+                              ? `✨ Pre-filled: [Today + ${getCalculatedLifespan(selected)} days]`
+                              : `✏️ Manually overridden`}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      show(errs.expiry) || (
+                        <span style={styles.hint}>Auto-fills based on item shelf life.</span>
+                      )
+                    )}
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-                    {selected?.lifespan_days ? (
-                      <button
-                        type="button"
-                        style={{ ...styles.chip, ...styles.chipSuggested }}
-                        onClick={() => updateRow(row.uid, { expiry: addDaysInput(selected.lifespan_days || 0) })}
-                        title={`Typical shelf life for ${selected.name}`}
-                      >
-                        Typical · {selected.lifespan_days}d
-                      </button>
-                    ) : null}
-                    {QUICK_PICKS.map((p) => (
-                      <button
-                        key={p.label}
-                        type="button"
-                        style={styles.chip}
-                        onClick={() => updateRow(row.uid, { expiry: addDaysInput(p.days) })}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                  {row.expiry && !errs.expiry ? (
-                    <span style={{ ...styles.expiryHint, color: tone.color }}>
-                      {expiryLabel(days)} · {formatExpiry(row.expiry)}
-                    </span>
-                  ) : (
-                    show(errs.expiry) || (
-                      <span style={styles.hint}>Use the date printed on the package (best before / use by).</span>
-                    )
-                  )}
                 </div>
               </div>
             );
@@ -378,76 +535,76 @@ export const ReceiveStockForm: React.FC<ReceiveStockFormProps> = ({
 
           <button
             type="button"
-            className="btn btn-secondary"
-            style={{ justifyContent: 'center', fontSize: '0.8rem', padding: '8px 12px' }}
-            onClick={() => setRows((prev) => [...prev, newRow()])}
+            style={styles.addBatchBtn}
+            onClick={() => {
+              const autoExpiry = selected ? addDaysInput(getCalculatedLifespan(selected)) : '';
+              setRows((prev) => [...prev, newRow('', autoExpiry)]);
+            }}
           >
-            <Plus size={14} />
+            <Plus size={14} color="#C89D66" />
             <span>Add another batch</span>
           </button>
         </div>
 
-        <div style={styles.inputRow}>
-          <div style={{ ...styles.inputGroup, flex: '1 1 160px' }}>
+        {/* Delivery Details: Clean 3-column responsive grid */}
+        <div style={styles.deliveryGrid}>
+          <div style={styles.inputGroup}>
             <label style={styles.label}>
               Total cost (₱){costRequired ? '' : ' · optional'}
             </label>
             <div style={styles.inputWithPrefix}>
-              <span style={{ ...styles.prefixIcon, fontSize: '14px', fontWeight: 700 }}>₱</span>
+              <span style={{ ...styles.prefixIcon, fontSize: '14px', fontWeight: 700, color: '#C89D66' }}>₱</span>
               <input
                 type="number"
                 step="0.01"
                 min="0"
                 inputMode="decimal"
-                placeholder={!costRequired && estimatedCost > 0 ? `≈ ${estimatedCost.toFixed(2)} at current cost` : 'e.g. 6000.00'}
+                placeholder="e.g. 6000.00"
                 className="glass-input"
                 value={cost}
                 onChange={(e) => setCost(e.target.value)}
                 style={{ width: '100%', boxSizing: 'border-box', paddingLeft: '28px' }}
               />
             </div>
-            {show(costRequired && !(parseFloat(cost) > 0) ? 'Enter the shipment cost' : undefined)}
+            {show(costRequired && !(parseFloat(cost) > 0) ? 'Total cost is required' : undefined)}
           </div>
 
-          <div style={{ ...styles.inputGroup, flex: '1 1 160px' }}>
+          <div style={styles.inputGroup}>
             <label style={styles.label}>Supplier</label>
-            <div style={styles.inputWithPrefix}>
-              <Truck size={14} style={styles.prefixIcon} />
-              <input
-                type="text"
-                placeholder="e.g. Valley View Farms"
-                className="glass-input"
-                value={supplier}
-                onChange={(e) => setSupplier(e.target.value)}
-                style={{ width: '100%', boxSizing: 'border-box', paddingLeft: '28px' }}
-              />
-            </div>
-            {show(!supplier.trim() ? 'Who delivered it?' : undefined)}
+            <input
+              type="text"
+              placeholder="e.g. Valley View Farms"
+              className="glass-input"
+              value={supplier}
+              onChange={(e) => setSupplier(e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box' }}
+            />
+            {show(!supplier.trim() ? 'Supplier is required' : undefined)}
           </div>
-        </div>
 
-        <div style={styles.inputGroup}>
-          <label style={styles.label}>Invoice number · optional</label>
-          <input
-            type="text"
-            placeholder="e.g. INV-99881"
-            className="glass-input"
-            value={invoiceNumber}
-            onChange={(e) => setInvoiceNumber(e.target.value)}
-            style={{ width: '100%', boxSizing: 'border-box' }}
-          />
-          {keptDelivery && (
-            <span style={styles.hint}>
-              Kept the supplier and invoice for the next item in this delivery.{' '}
-              <button
-                type="button"
-                style={{ ...styles.linkBtn, marginLeft: 0 }}
-                onClick={() => { setSupplier(''); setInvoiceNumber(''); setKeptDelivery(false); }}
-              >
-                Clear
-              </button>
-            </span>
-          )}
+          <div style={styles.inputGroup}>
+            <label style={styles.label}>Invoice number · optional</label>
+            <input
+              type="text"
+              placeholder="e.g. INV-99881"
+              className="glass-input"
+              value={invoiceNumber}
+              onChange={(e) => setInvoiceNumber(e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box' }}
+            />
+            {keptDelivery && (
+              <span style={styles.hint}>
+                Kept supplier and invoice for next item.{' '}
+                <button
+                  type="button"
+                  style={{ ...styles.linkBtn, marginLeft: 0 }}
+                  onClick={() => { setSupplier(''); setInvoiceNumber(''); setKeptDelivery(false); }}
+                >
+                  Clear
+                </button>
+              </span>
+            )}
+          </div>
         </div>
 
         {shortLived.length > 0 && (
@@ -460,32 +617,180 @@ export const ReceiveStockForm: React.FC<ReceiveStockFormProps> = ({
           </div>
         )}
 
-        <div style={styles.summary}>
-          <span>
+        <div style={styles.summaryRow}>
+          <div style={styles.summaryText}>
             {totalQty > 0 ? (
               <>
-                Receiving <strong>{formatQty(totalQty)} {unit}</strong> in {rows.length}{' '}
+                Stocking in <strong style={{ color: '#FFFFFF' }}>{formatQty(totalQty)} {unit}</strong> in {rows.length}{' '}
                 {rows.length === 1 ? 'batch' : 'batches'}
                 {selected && (
-                  <> · stock {formatQty(selected.stock_level)} → <strong>{formatQty(selected.stock_level + totalQty)} {unit}</strong></>
+                  <> · stock {formatQty(selected.stock_level)} → <strong style={{ color: '#FFFFFF' }}>{formatQty(selected.stock_level + totalQty)} {unit}</strong></>
                 )}
               </>
             ) : (
-              'Enter the quantity for each batch'
+              'Enter the quantity for each batch above'
             )}
-          </span>
-        </div>
+          </div>
 
-        <button
-          type="submit"
-          className="btn btn-primary"
-          style={{ justifyContent: 'center', opacity: saving ? 0.7 : 1 }}
-          disabled={saving}
-        >
-          <Plus size={16} />
-          <span>{saving ? 'Saving…' : rows.length > 1 ? `Receive ${rows.length} batches` : 'Receive batch'}</span>
-        </button>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            style={styles.submitBtn}
+            disabled={saving}
+          >
+            <Plus size={16} />
+            <span>{saving ? 'Saving…' : rows.length > 1 ? `Stock In ${rows.length} Batches` : 'Stock In Batch'}</span>
+          </button>
+        </div>
       </form>
+
+      {/* Lightweight in-place modal: Add Ingredient Spec */}
+      {showNewModal && (
+        <div style={styles.modalOverlay} onClick={() => !creatingIng && setShowNewModal(false)}>
+          <div
+            style={styles.modalCard}
+            className="glass-card"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div style={styles.modalHeader}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Archive size={20} color="#C89D66" />
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#FFFFFF' }}>
+                  Add Ingredient Spec
+                </h3>
+              </div>
+              <button
+                type="button"
+                style={styles.iconBtn}
+                onClick={() => setShowNewModal(false)}
+                disabled={creatingIng}
+                aria-label="Close dialog"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p style={{ margin: '0 0 16px', fontSize: '0.78rem', color: '#94A3B8', lineHeight: 1.45 }}>
+              Register a new ingredient specification into the catalog. Once saved, it will be automatically selected so you can log its incoming stock batch immediately.
+            </p>
+
+            <form onSubmit={handleSaveNewIngredient} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Ingredient Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Vanilla Bean Syrup"
+                  className="glass-input"
+                  value={newIngName}
+                  onChange={(e) => setNewIngName(e.target.value)}
+                  autoFocus
+                  required
+                />
+              </div>
+
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Category</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {ALL_CATEGORIES.map((cat) => {
+                    const active = newIngCategory === cat;
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => handleCategorySelect(cat)}
+                        style={{
+                          ...styles.chip,
+                          ...(active ? { background: 'rgba(200, 157, 102, 0.2)', borderColor: '#C89D66', color: '#C89D66', fontWeight: 700 } : {}),
+                        }}
+                      >
+                        {cat}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={styles.inputRow}>
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                  <label style={styles.label}>Measurement Unit</label>
+                  <select
+                    className="glass-input"
+                    value={newIngUnit}
+                    onChange={(e) => setNewIngUnit(e.target.value)}
+                  >
+                    {ALL_UNITS.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                  <label style={styles.label}>Shelf Life (Days)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="glass-input"
+                    value={newIngLifespan}
+                    onChange={(e) => setNewIngLifespan(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div style={styles.inputRow}>
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                  <label style={styles.label}>Reorder Point</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="glass-input"
+                    placeholder="e.g. 5"
+                    value={newIngReorder}
+                    onChange={(e) => setNewIngReorder(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                  <label style={styles.label}>Default Cost per Unit (₱)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="glass-input"
+                    placeholder="0.00"
+                    value={newIngCost}
+                    onChange={(e) => setNewIngCost(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {newIngError && (
+                <div style={{ color: '#FF4D4D', fontSize: '0.75rem', fontWeight: 600 }}>
+                  {newIngError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowNewModal(false)}
+                  disabled={creatingIng}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ background: '#C89D66', borderColor: '#C89D66', color: '#FFFFFF' }}
+                  disabled={creatingIng}
+                >
+                  {creatingIng ? 'Saving…' : 'Save & Select'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -496,57 +801,81 @@ const styles = {
     display: 'flex',
     flexDirection: 'column' as const,
     textAlign: 'left' as const,
+    background: '#121212',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '16px',
+    boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.5)',
+    width: '100%',
+    boxSizing: 'border-box' as const,
   },
   cardHeader: {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '4px',
-    borderBottom: '1px solid var(--border-glass)',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
     paddingBottom: '16px',
     marginBottom: '20px',
   },
   headerTitleGroup: { display: 'flex', alignItems: 'center', gap: '8px' },
-  cardTitle: { margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)' },
-  headerDesc: { fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.45 },
-  formBody: { display: 'flex', flexDirection: 'column' as const, gap: '16px', scrollMarginTop: '24px' },
+  cardTitle: { margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.01em' },
+  headerDesc: { fontSize: '0.78rem', color: '#94A3B8', lineHeight: 1.45 },
+  formBody: { display: 'flex', flexDirection: 'column' as const, gap: '18px', scrollMarginTop: '24px', width: '100%' },
   inputGroup: { display: 'flex', flexDirection: 'column' as const, gap: '6px', minWidth: 0 },
   inputRow: { display: 'flex', gap: '12px', flexWrap: 'wrap' as const },
-  label: { fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 },
-  subLabel: { fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
-  hint: { fontSize: '0.72rem', color: 'var(--text-muted)' },
-  fieldError: { fontSize: '0.72rem', color: '#ef4444', fontWeight: 600 },
+  batchFieldsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+    gap: '16px',
+    alignItems: 'start',
+    width: '100%',
+  },
+  deliveryGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '16px',
+    width: '100%',
+  },
+  label: { fontSize: '0.8rem', color: '#94A3B8', fontWeight: 600 },
+  subLabel: { fontSize: '0.72rem', color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em' },
+  hint: { fontSize: '0.72rem', color: '#94A3B8' },
+  fieldError: { fontSize: '0.72rem', color: '#FF4D4D', fontWeight: 600 },
   expiryHint: { fontSize: '0.75rem', fontWeight: 700 },
   inputWithSuffix: { position: 'relative' as const, display: 'flex', alignItems: 'center' },
-  suffixText: { position: 'absolute' as const, right: '12px', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 },
+  suffixText: { position: 'absolute' as const, right: '12px', fontSize: '0.8rem', color: '#94A3B8', fontWeight: 600 },
   inputWithPrefix: { position: 'relative' as const, display: 'flex', alignItems: 'center' },
-  prefixIcon: { position: 'absolute' as const, left: '10px', color: 'var(--text-muted)', pointerEvents: 'none' as const },
+  prefixIcon: { position: 'absolute' as const, left: '10px', color: '#94A3B8', pointerEvents: 'none' as const },
   onHand: {
     display: 'flex',
     gap: '8px',
     fontSize: '0.76rem',
-    color: 'var(--text-muted)',
-    background: 'var(--surface-muted, rgba(148,118,86,0.06))',
-    border: '1px solid var(--border-glass)',
+    color: '#94A3B8',
+    background: 'rgba(255, 255, 255, 0.04)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
     borderRadius: '10px',
     padding: '10px 12px',
     lineHeight: 1.45,
   },
-  code: { fontFamily: 'ui-monospace, monospace', fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-primary)' },
+  code: { fontFamily: 'ui-monospace, monospace', fontSize: '0.74rem', fontWeight: 700, color: '#FFFFFF' },
   batchRow: {
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '10px',
-    padding: '14px',
+    gap: '12px',
+    padding: '16px 20px',
     borderRadius: '12px',
-    border: '1px solid var(--border-glass)',
-    background: 'var(--surface-muted, rgba(148,118,86,0.04))',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    background: 'rgba(18, 18, 22, 0.65)',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.25)',
+    width: '100%',
+    boxSizing: 'border-box' as const,
   },
   batchRowHead: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  batchIndex: { fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-primary)' },
+  batchIndex: { fontSize: '0.85rem', fontWeight: 800, color: '#FFFFFF' },
   iconBtn: {
     background: 'transparent',
     border: 'none',
-    color: 'var(--text-muted)',
+    color: '#94A3B8',
     cursor: 'pointer',
     padding: '4px',
     borderRadius: '6px',
@@ -557,23 +886,23 @@ const styles = {
     fontWeight: 600,
     padding: '6px 9px',
     borderRadius: '999px',
-    border: '1px solid var(--border-glass)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
     background: 'transparent',
-    color: 'var(--text-muted)',
+    color: '#94A3B8',
     cursor: 'pointer',
     whiteSpace: 'nowrap' as const,
   },
   chipSuggested: {
-    color: '#f59e0b',
-    borderColor: 'rgba(245, 158, 11, 0.4)',
-    background: 'rgba(245, 158, 11, 0.08)',
+    color: '#C89D66',
+    borderColor: 'rgba(200, 157, 102, 0.4)',
+    background: 'rgba(200, 157, 102, 0.08)',
   },
   notice: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     fontSize: '0.76rem',
-    color: 'var(--text-primary)',
+    color: '#FFFFFF',
     border: '1px solid',
     borderRadius: '10px',
     padding: '10px 12px',
@@ -584,16 +913,100 @@ const styles = {
     background: 'none',
     border: 'none',
     padding: 0,
-    color: '#f59e0b',
+    color: '#C89D66',
     fontWeight: 700,
     fontSize: '0.75rem',
     cursor: 'pointer',
     textDecoration: 'underline',
   },
-  summary: {
+  summaryRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '16px',
+    flexWrap: 'wrap' as const,
+    borderTop: '1px dashed rgba(255, 255, 255, 0.08)',
+    paddingTop: '16px',
+    marginTop: '4px',
+  },
+  summaryText: {
+    fontSize: '0.85rem',
+    color: '#94A3B8',
+    flex: '1 1 280px',
+  },
+  newItemBtn: {
+    background: 'rgba(200, 157, 102, 0.16)',
+    border: '1px solid rgba(200, 157, 102, 0.4)',
+    color: '#C89D66',
     fontSize: '0.8rem',
-    color: 'var(--text-muted)',
-    borderTop: '1px dashed var(--border-glass)',
-    paddingTop: '12px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    padding: '8px 14px',
+    borderRadius: '8px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    transition: 'all 0.15s ease',
+    whiteSpace: 'nowrap' as const,
+    flexShrink: 0,
+  },
+  addBatchBtn: {
+    justifyContent: 'center',
+    fontSize: '0.8rem',
+    fontWeight: 600,
+    padding: '10px 14px',
+    color: '#C89D66',
+    border: '1px solid rgba(200, 157, 102, 0.35)',
+    background: 'rgba(200, 157, 102, 0.08)',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  submitBtn: {
+    justifyContent: 'center',
+    background: '#C89D66',
+    border: '1px solid #C89D66',
+    color: '#FFFFFF',
+    fontWeight: 700,
+    padding: '12px 24px',
+    borderRadius: '8px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    cursor: 'pointer',
+    boxShadow: '0 4px 14px rgba(200, 157, 102, 0.25)',
+    transition: 'all 0.15s ease',
+    flexShrink: 0,
+  },
+  modalOverlay: {
+    position: 'fixed' as const,
+    inset: 0,
+    background: 'rgba(0, 0, 0, 0.65)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1050,
+    padding: '16px',
+    backdropFilter: 'blur(5px)',
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: '460px',
+    background: '#121212',
+    color: '#FFFFFF',
+    border: '1px solid rgba(255, 255, 255, 0.14)',
+    borderRadius: '16px',
+    padding: '24px',
+    boxShadow: '0 24px 48px rgba(0,0,0,0.5)',
+    textAlign: 'left' as const,
+  },
+  modalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '8px',
   },
 };

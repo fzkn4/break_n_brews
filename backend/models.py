@@ -125,6 +125,9 @@ def ensure_recipe_size_columns():
             if 'price_large' not in columns:
                 conn.execute(text('ALTER TABLE menu_items ADD COLUMN price_large NUMERIC(10, 2)'))
                 print('Added menu_items.price_large column')
+            if 'size_config' not in columns:
+                conn.execute(text('ALTER TABLE menu_items ADD COLUMN size_config TEXT'))
+                print('Added menu_items.size_config column')
         if insp.has_table('order_items'):
             columns = {col['name'] for col in insp.get_columns('order_items')}
             if 'size' not in columns:
@@ -190,7 +193,43 @@ def ensure_notification_schema():
         if 'low_stock_alerted_at' not in columns:
             with db.engine.begin() as conn:
                 _add_column(conn, 'ingredients', 'low_stock_alerted_at', 'TIMESTAMP')
+    ensure_store_settings_columns()
     ensure_subscriber_columns()
+
+
+STORE_SETTINGS_COLUMNS = {
+    'location_name': 'VARCHAR(120)',
+    'latitude': 'FLOAT',
+    'longitude': 'FLOAT',
+    'ai_daily_enabled': 'BOOLEAN NOT NULL DEFAULT TRUE',
+    'last_insight_key': 'VARCHAR(20)',
+}
+
+
+def ensure_store_settings_columns():
+    """Add the AI-insights location and schedule columns to an existing store_settings row.
+
+    Runs before anything reads StoreSettings, because every query selects all mapped columns.
+    """
+    insp = inspect(db.engine)
+    if not insp.has_table('store_settings'):
+        return
+    columns = {col['name'] for col in insp.get_columns('store_settings')}
+    missing = [c for c in STORE_SETTINGS_COLUMNS if c not in columns]
+    if not missing:
+        return
+    with db.engine.begin() as conn:
+        for column in missing:
+            _add_column(conn, 'store_settings', column, STORE_SETTINGS_COLUMNS[column])
+        if 'latitude' in missing:
+            import os
+            conn.execute(
+                text('UPDATE store_settings SET location_name = :n, latitude = :lat, longitude = :lon '
+                     'WHERE latitude IS NULL'),
+                {'n': os.getenv('STORE_LOCATION', DEFAULT_LOCATION['name']),
+                 'lat': float(os.getenv('STORE_LATITUDE', DEFAULT_LOCATION['latitude'])),
+                 'lon': float(os.getenv('STORE_LONGITUDE', DEFAULT_LOCATION['longitude']))},
+            )
 
 
 def new_unsubscribe_token():
@@ -331,6 +370,7 @@ class MenuItem(db.Model):
     is_available = db.Column(db.Boolean, default=True)
     image_url = db.Column(db.String(255), nullable=True)
     offered_sizes = db.Column(db.Text, nullable=True)  # JSON list, e.g. ["Small","Medium","Large"]
+    size_config = db.Column(db.Text, nullable=True)  # JSON object, e.g. {"Small": {"oz": 12, "container_id": 7}}
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -348,13 +388,20 @@ class MenuItem(db.Model):
 
     def low_stock_ingredients(self):
         """Names of recipe ingredients at or under their reorder point."""
-        return [r.ingredient.name for r in self.ingredients if is_low_stock(r.ingredient)]
+        return [r.ingredient.name for r in self.ingredients if r.ingredient and is_low_stock(r.ingredient)]
 
     def to_dict(self, auto_pause=None):
         offered = offered_sizes_for(self)
         if auto_pause is None:
             auto_pause = StoreSettings.current().auto_pause_products
         paused_by = self.low_stock_ingredients() if auto_pause else []
+        size_config_dict = None
+        if self.size_config:
+            try:
+                size_config_dict = json.loads(self.size_config)
+            except Exception:
+                size_config_dict = None
+
         return {
             'id': self.id,
             'name': self.name,
@@ -368,20 +415,21 @@ class MenuItem(db.Model):
             'created_at': self.created_at.isoformat(),
             'offered_sizes': offered,
             'supports_sizes': bool(offered),
+            'size_config': size_config_dict,
             # is_available is the admin's manual switch; stock_paused is automatic and lifts on restock.
             'stock_paused': bool(paused_by),
             'paused_ingredients': paused_by,
             'ingredients': [
                 {
                     'ingredient_id': mi.ingredient_id,
-                    'name': mi.ingredient.name,
-                    'unit': mi.ingredient.unit,
+                    'name': mi.ingredient.name if mi.ingredient else 'Unknown',
+                    'unit': mi.ingredient.unit if mi.ingredient else '',
                     'default_quantity': mi.default_quantity,
                     'qty_small': mi.qty_small,
                     'qty_medium': mi.qty_medium,
                     'qty_large': mi.qty_large,
                     'is_customizable': mi.is_customizable
-                } for mi in self.ingredients
+                } for mi in self.ingredients if mi.ingredient
             ]
         }
 
@@ -677,6 +725,9 @@ class NotificationRecipient(db.Model):
         }
 
 
+DEFAULT_LOCATION = {'name': 'Pagadian City, Zamboanga del Sur', 'latitude': 7.8257, 'longitude': 123.4370}
+
+
 class StoreSettings(db.Model):
     """Single-row table (id=1) for the store-wide notification switches and closing time.
 
@@ -691,6 +742,13 @@ class StoreSettings(db.Model):
     timezone = db.Column(db.String(64), nullable=False, default='Asia/Manila')
     # Store-local "YYYY-MM-DDTHH:MM" of the last closing a report was sent (or skipped) for.
     last_report_key = db.Column(db.String(20), nullable=True)
+    # Where the store is, for weather and local news in the AI sales insights.
+    location_name = db.Column(db.String(120), nullable=True)
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    ai_daily_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    # Store-local date (YYYY-MM-DD) the scheduled insights run was last claimed for.
+    last_insight_key = db.Column(db.String(20), nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     @classmethod
@@ -702,6 +760,9 @@ class StoreSettings(db.Model):
                 id=1,
                 closing_time=os.getenv('STORE_CLOSING_TIME', '22:00'),
                 timezone=os.getenv('STORE_TIMEZONE', 'Asia/Manila'),
+                location_name=os.getenv('STORE_LOCATION', DEFAULT_LOCATION['name']),
+                latitude=float(os.getenv('STORE_LATITUDE', DEFAULT_LOCATION['latitude'])),
+                longitude=float(os.getenv('STORE_LONGITUDE', DEFAULT_LOCATION['longitude'])),
             )
             db.session.add(row)
             try:
@@ -735,4 +796,74 @@ class EmailLog(db.Model):
             'error': self.error,
             'created_at': self.created_at.isoformat(),
             'sent_at': self.sent_at.isoformat() if self.sent_at else None,
+        }
+
+
+class AiInsightRun(db.Model):
+    """One AI sales-insights run: the data snapshot sent, what Claude returned, and what it cost."""
+    __tablename__ = 'ai_insight_runs'
+    id = db.Column(db.Integer, primary_key=True)
+    status = db.Column(db.String(20), nullable=False, default='running')  # running, succeeded, failed
+    trigger = db.Column(db.String(20), nullable=False, default='manual')  # manual, scheduled
+    requested_by = db.Column(db.String(100), nullable=True)
+    model = db.Column(db.String(60), nullable=True)
+    summary = db.Column(db.Text, nullable=True)
+    result = db.Column(db.Text, nullable=True)  # JSON: insights, outlook, external factors
+    sources = db.Column(db.Text, nullable=True)  # JSON list of {url, title}
+    context = db.Column(db.Text, nullable=True)  # JSON snapshot of the numbers Claude was given
+    error = db.Column(db.Text, nullable=True)
+    input_tokens = db.Column(db.Integer, nullable=True)
+    output_tokens = db.Column(db.Integer, nullable=True)
+    web_searches = db.Column(db.Integer, nullable=True)
+    started_at = db.Column(db.DateTime, default=datetime.utcnow)
+    finished_at = db.Column(db.DateTime, nullable=True)
+
+    feedback = db.relationship('AiInsightFeedback', backref='run', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self, full=True):
+        data = {
+            'id': self.id,
+            'status': self.status,
+            'trigger': self.trigger,
+            'requested_by': self.requested_by,
+            'model': self.model,
+            'summary': self.summary,
+            'error': self.error,
+            'input_tokens': self.input_tokens,
+            'output_tokens': self.output_tokens,
+            'web_searches': self.web_searches,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'finished_at': self.finished_at.isoformat() if self.finished_at else None,
+        }
+        if full:
+            result = json.loads(self.result) if self.result else {}
+            data.update({
+                'insights': result.get('insights', []),
+                'outlook': result.get('outlook', []),
+                'external_factors': result.get('external_factors', []),
+                'sources': json.loads(self.sources) if self.sources else [],
+                'feedback': {f.insight_index: f.to_dict() for f in self.feedback},
+            })
+        return data
+
+
+class AiInsightFeedback(db.Model):
+    """An admin's thumbs up/down on one insight; fed back into the next run's prompt."""
+    __tablename__ = 'ai_insight_feedback'
+    __table_args__ = (db.UniqueConstraint('run_id', 'insight_index', name='uq_ai_feedback_insight'),)
+    id = db.Column(db.Integer, primary_key=True)
+    run_id = db.Column(db.Integer, db.ForeignKey('ai_insight_runs.id', ondelete='CASCADE'), nullable=False)
+    insight_index = db.Column(db.Integer, nullable=False)
+    rating = db.Column(db.String(10), nullable=False)  # up, down
+    note = db.Column(db.String(500), nullable=True)
+    created_by = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'insight_index': self.insight_index,
+            'rating': self.rating,
+            'note': self.note,
+            'created_by': self.created_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }

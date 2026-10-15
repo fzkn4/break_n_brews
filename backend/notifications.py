@@ -145,6 +145,12 @@ def _scheduler_loop(app):
             except Exception:
                 db.session.rollback()
                 app.logger.exception('Notification scheduler tick failed')
+            try:
+                from insights import maybe_run_scheduled  # late import: insights builds on the report helpers
+                maybe_run_scheduled(app)
+            except Exception:
+                db.session.rollback()
+                app.logger.exception('AI insights schedule tick failed')
             finally:
                 db.session.remove()
         time.sleep(TICK_SECONDS)

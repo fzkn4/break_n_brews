@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Break & Brews is a café/billiards management system: one Flask + PostgreSQL API (`backend/`) serving three
 independent Vite + React 19 + TypeScript SPAs — `admin/` (inventory, menu/recipes, requests, stock-in, reports),
-`staffs/` (kitchen order queue, ingredient requests), and `customer/` (mobile-first ordering + live order tracker).
+`staffs/` (kitchen order queue, stock-in, inventory alerts + supply requests), and `customer/` (mobile-first ordering + live order tracker).
 
 There is no monorepo tooling. Each frontend has its own `package.json`, `node_modules`, and `package-lock.json`;
 install and run each separately.
@@ -76,17 +76,23 @@ makes every menu item a bill of materials over `Ingredient`. Nearly every behavi
   walks each recipe, subtracts what the cart has already reserved, and uses the result to badge items "Only N left"
   or "Sold out" and cap the quantity stepper. It is a courtesy layer only — the backend still decides, and its 400
   message is shown to the customer verbatim.
+- **Sized drinks also consume packaging**: `MenuItem.size_config` (JSON, e.g.
+  `{"Small": {"oz": 12, "container_id": 7, "straw_id": 9}}`) links each size to a cup and straw ingredient.
+  `POST /api/orders` adds one of each per unit unless the recipe already uses that ingredient — again in both the
+  validation pass and the deduction pass. Admin's `ManageMenu` pre-picks them by name (`12oz`, `straw`).
 
 ### Stock batches and expiry (`backend/batches.py`, `StockBatch` in `models.py`)
 
 - Every stock-in is one or more **batches** (`stock_batches`), each with its own `batch_code` (auto-generated
-  `WM-261011-01` style when blank, unique per ingredient) and a required `expiry_date` that may not be in the past.
+  `WM-20261011-01` style when blank (2 letters for one-word names, initials otherwise), unique per ingredient) and a required `expiry_date` that may not be in the past.
   `POST /api/stockin` takes `batches: [{quantity, batch_code, expiry_date}]`; `cost` is optional (staff) and then
   valued at the current `cost_per_unit` without changing it.
-- `Ingredient.stock_level` is still the total everyone reads; active batches' `quantity_remaining` always sum to it.
-  **Never assign `stock_level` directly** — use `consume()` / `restore()` / `reconcile()` from `batches.py`, which
-  draw first-expired-first-out: undated batches (opening stock, manual adjustments) first, then soonest expiry,
-  expired batches last. `GET /api/batches` returns `use_rank` (1 = open next; null for expired).
+- `Ingredient.stock_level` is still the total everyone reads, but it counts **only unexpired** active batches —
+  `recalculate_stock()` derives it from them, and `GET /api/ingredients` recalculates (and commits) every
+  ingredient on each read so stock drops the day a batch expires. **Never assign `stock_level` directly** — use
+  `consume()` / `restore()` / `reconcile()` from `batches.py`. Consumption is first-expired-first-out over dated
+  batches (soonest expiry first), then undated batches (opening stock, manual adjustments) oldest first; expired
+  batches are never drawn from and wait to be discarded. `GET /api/batches` returns `use_rank` (1 = open next; null for expired).
 - `ensure_batch_schema()` gives existing stock an undated `OPEN-…` batch on first start; portals nudge users to add
   its expiry. `POST /api/batches/<id>/discard` writes off expired/spoiled stock; `PUT /api/batches/<id>` fixes a
   code or date. Admin "Stock In & Expiry" and the staff tab of the same name share `ReceiveStockForm` and
@@ -95,6 +101,29 @@ makes every menu item a bill of materials over `Ingredient`. Nearly every behavi
 Other stock movements: `POST /api/stockin` adds quantity and recomputes `cost_per_unit` from `cost / quantity`;
 approving an `IngredientRequest` (`PUT /api/requests/<id>`) deducts the requested quantity and un-approving adds it
 back — approval transitions, not creation, are what move stock.
+
+### AI sales insights (`backend/forecasting.py`, `signals.py`, `insights.py`)
+
+- **Numbers come from code, words come from Claude.** `forecasting.build_forecast()` computes per-item trends,
+  a 7-day forecast (60% last-7 + 40% last-28 daily average × a shrunk day-of-week factor), ingredient demand
+  through the recipes, days of cover, run-out dates, suggested order quantities and FEFO expiry risk, plus a
+  walk-forward backtest. Days are business days (orders before an after-midnight closing count to the day
+  before). `signals.py` adds Open-Meteo weather, Nager.Date PH holidays, paydays (15th / month end), and
+  weather effects measured on the store's own history (detrended, weekday-adjusted, t-score >= 2.5, so noise
+  is not reported). None of this needs an API key: `GET /api/insights/forecast`.
+- `insights.py` sends that snapshot to Claude (`claude-opus-5-5`, adaptive thinking, `web_search` located at
+  the store, server-side refusal fallback) and takes the answer through the `submit_insights` tool. `_validate()`
+  drops unknown menu/ingredient ids and any URL web search did not return. Suggestions are advice only;
+  nothing changes stock or the menu.
+- Runs execute on a background thread (`POST /api/insights/refresh` returns 202, the portal polls
+  `GET /api/insights`) and are stored in `ai_insight_runs`; thumbs up/down per insight (`ai_insight_feedback`)
+  is fed into the next prompt. One daily run per store-local date after `AI_INSIGHTS_HOUR` is claimed via
+  `store_settings.last_insight_key` from the notifications scheduler tick; manual runs have a cooldown because
+  each costs money. The latest run (36h or newer) is added to the end-of-day email.
+- `ANTHROPIC_API_KEY` lives only in `backend/.env`; without it `configured: false` and only the AI part is off.
+  Store location (`location_name`, `latitude`, `longitude`) defaults to Pagadian City and is edited in admin's
+  Sales Insights tab. The new `store_settings` columns are added by `ensure_store_settings_columns()`, which
+  must run before anything reads `StoreSettings` (every query selects all mapped columns).
 
 ### Cross-portal "real time" is polling, not sockets
 
@@ -142,7 +171,7 @@ remembers which orders it has reviewed in `bb_reviewed_orders` to hide the promp
 - Styling is a mix: shared layout/component classes live in `index.css` (dark theme by default, `.light-theme` on
   `<html>` toggles light in admin), while per-element layout is frequently written as inline `style={{}}` objects.
   Match whichever the surrounding file uses. `customer/` is the exception — it is fully class-based off the
-  cream/espresso tokens in its own `index.css`, with breakpoints at 900/780/520px and a mobile tab bar; keep new
+  dark matte tokens in its own `index.css`, with breakpoints at 900/780/520px and a mobile tab bar; keep new
   customer markup on classes rather than inline styles.
 - Money renders as `$0.00` in all three portals.
 - Backend timestamps are naive UTC (`datetime.utcnow().isoformat()`, no `Z`). `customer/` parses them through
@@ -164,7 +193,7 @@ remembers which orders it has reviewed in `bb_reviewed_orders` to hide the promp
 `/api/ingredients`, `/api/menu`, `/api/requests`, `/api/stockin`, `/api/staff`, `/api/orders`, `/api/reviews`
 (CRUD subsets), plus `/api/login`, `/api/subscribers` (newsletter signups), `/api/notifications/*`
 (email settings, recipients, log, test send, low-stock digest, daily-report preview/send),
-`/api/analytics?days=N` (KPIs, revenue trend, category distribution, low stock) and
+`/api/insights/*` (AI sales insights, forecast, feedback, location), `/api/analytics?days=N` (KPIs, revenue trend, category distribution, low stock) and
 `/api/reports` (inventory health, supplier summary, sales breakdown). `clean_decimal()` recursively converts
 `Decimal` to `float` before every JSON response — use it on any new response containing money.
 

@@ -38,12 +38,13 @@ export const Topbar: React.FC<TopbarProps> = ({
       case 'dashboard': return 'Dashboard Overview';
       case 'ingredients': return 'Manage Ingredients';
       case 'menu': return 'Manage Cafe Menu';
-      case 'requests': return 'Manage Customer Requests';
+      case 'requests': return 'Ingredients Supply Request';
       case 'stockin': return 'Stock In & Expiry';
       case 'reviews': return 'Reviews & Subscribers';
       case 'reports': return 'View Report/Inventory';
       case 'tables': return 'Table QR Codes';
       case 'notifications': return 'Email Notifications';
+      case 'insights': return 'Sales Insights';
       default: return 'Break & Brews';
     }
   };
@@ -85,7 +86,7 @@ export const Topbar: React.FC<TopbarProps> = ({
 
         {/* Live Clock */}
         <div style={styles.clockContainer}>
-          <Clock size={16} color="#f59e0b" />
+          <Clock size={16} color="#D4A373" />
           <span style={styles.clockText}>
             {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </span>
@@ -146,8 +147,8 @@ export const Topbar: React.FC<TopbarProps> = ({
 const styles = {
   topbar: {
     height: '70px',
-    backgroundColor: 'var(--bg-primary)',
-    borderBottom: '1px solid var(--border-glass)',
+    backgroundColor: 'rgba(12, 12, 15, 0.88)',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -156,13 +157,14 @@ const styles = {
     top: 0,
     zIndex: 90,
     flexShrink: 0,
-    backdropFilter: 'blur(8px)'
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
   },
   title: {
     margin: 0,
     fontSize: '1.4rem',
     fontWeight: '700',
-    color: 'var(--text-primary)'
+    color: '#FFFFFF'
   },
   rightSection: {
     display: 'flex',
@@ -173,14 +175,14 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    backgroundColor: 'rgba(245, 158, 11, 0.06)',
+    backgroundColor: 'rgba(212, 163, 115, 0.1)',
     padding: '6px 12px',
-    borderRadius: '8px',
-    border: '1px solid rgba(245, 158, 11, 0.15)'
+    borderRadius: '12px',
+    border: '1px solid rgba(212, 163, 115, 0.25)'
   },
   clockText: {
     fontSize: '0.85rem',
-    color: '#f59e0b',
+    color: '#D4A373',
     fontWeight: '600',
     fontFamily: 'monospace'
   },

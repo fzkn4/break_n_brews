@@ -8,7 +8,8 @@ import {
   BarChart3,
   MessageSquare,
   QrCode,
-  Mail
+  Mail,
+  Sparkles
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -16,6 +17,7 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   lowStockCount: number;
   pendingReviewsCount: number;
+  pendingRequestsCount?: number;
   /** Batches expired or expiring within 2 days. */
   expiringBatchCount?: number;
 }
@@ -25,16 +27,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab, 
   lowStockCount, 
   pendingReviewsCount,
+  pendingRequestsCount = 0,
   expiringBatchCount = 0
 }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'ingredients', label: 'Manage Ingredients', icon: ChefHat, badge: lowStockCount, badgeColor: 'bg-red' },
+    { id: 'requests', label: 'Ingredients Supply Request', icon: ClipboardList, badge: pendingRequestsCount, badgeColor: 'bg-amber' },
     { id: 'menu', label: 'Manage Menu', icon: Coffee },
     { id: 'tables', label: 'Table QR Codes', icon: QrCode },
-    { id: 'requests', label: 'Manage Customer Requests', icon: ClipboardList },
     { id: 'stockin', label: 'Stock In & Expiry', icon: PlusCircle, badge: expiringBatchCount, badgeColor: 'bg-amber' },
     { id: 'reviews', label: 'Reviews', icon: MessageSquare, badge: pendingReviewsCount, badgeColor: 'bg-blue' },
+    { id: 'insights', label: 'Sales Insights', icon: Sparkles },
     { id: 'reports', label: 'View Report/Inventory', icon: BarChart3 },
     { id: 'notifications', label: 'Email Notifications', icon: Mail }
   ];
@@ -72,7 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {item.badge !== undefined && item.badge > 0 && (
                 <span style={{
                   ...styles.badge,
-                  backgroundColor: item.badgeColor === 'bg-blue' ? '#3b82f6' : item.badgeColor === 'bg-amber' ? '#f97316' : '#ef4444'
+                  backgroundColor: item.badgeColor === 'bg-blue' ? '#3b82f6' : item.badgeColor === 'bg-amber' ? '#D4A373' : '#FF4D4D'
                 }}>
                   {item.badge}
                 </span>
@@ -93,7 +97,10 @@ const styles = {
     flexDirection: 'column' as const,
     padding: '24px 16px',
     boxSizing: 'border-box' as const,
-    backgroundColor: '#393E46'
+    backgroundColor: 'rgba(12, 12, 15, 0.88)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    borderRight: '1px solid rgba(255, 255, 255, 0.08)',
   },
   logoContainer: {
     display: 'flex',

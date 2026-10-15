@@ -5,12 +5,13 @@ import { Topbar } from './components/Topbar';
 import { Dashboard } from './components/Dashboard';
 import { IngredientsList } from './components/IngredientsList';
 import { ManageMenu } from './components/ManageMenu';
-import { ManageRequests } from './components/ManageRequests';
+import { IngredientSupplyRequests } from './components/IngredientSupplyRequests';
 import { RecordStockIn } from './components/RecordStockIn';
 import { Reports } from './components/Reports';
 import { ManageReviews } from './components/ManageReviews';
 import { TableQrCodes } from './components/TableQrCodes';
 import { EmailNotifications } from './components/EmailNotifications';
+import { SalesInsights } from './components/SalesInsights';
 import { Login } from './components/Login';
 import type { Ingredient, MenuItem, IngredientRequest, StockInLog, StockBatch, StockInPayload, AnalyticsData, ReportData, Review, Subscriber, Order, AnnouncementResult } from './types';
 import { hydrateAndMergeMenuItems, saveCustomMenuItem, removeCustomMenuItem, getCustomMenuItems, getDeletedMenuItemIds } from './lib/menuStorage';
@@ -69,7 +70,7 @@ function App() {
   const [requests, setRequests] = useState<IngredientRequest[]>(() =>
     readStore<IngredientRequest[]>(STORAGE_KEYS.requests, [])
   );
-  const [orders, setOrders] = useState<Order[]>(() =>
+  const [, setOrders] = useState<Order[]>(() =>
     readStore<Order[]>(STORAGE_KEYS.orders, [])
   );
   const [stockInLogs, setStockInLogs] = useState<StockInLog[]>(() =>
@@ -222,7 +223,7 @@ function App() {
   }, [analyticsDays]);
 
   // ------------ INGREDIENTS HANDLERS ------------
-  const handleCreateIngredient = async (data: any) => {
+  const handleCreateIngredient = async (data: any): Promise<Ingredient | null> => {
     try {
       const res = await fetch(`${API_URL}/ingredients`, {
         method: 'POST',
@@ -230,8 +231,10 @@ function App() {
         body: JSON.stringify(data)
       });
       if (res.ok) {
-        showToast('Ingredient added successfully');
-        syncInventoryData();
+        const created: Ingredient = await res.json();
+        showToast(`Ingredient "${created.name}" registered successfully`);
+        await syncInventoryData(true);
+        return created;
       } else {
         const err = await res.json();
         showToast(err.error || 'Failed to add ingredient', 'error');
@@ -239,6 +242,7 @@ function App() {
     } catch (err) {
       showToast('Network error adding ingredient', 'error');
     }
+    return null;
   };
 
   const handleUpdateIngredient = async (id: number, data: any) => {
@@ -384,6 +388,34 @@ function App() {
     }
   };
 
+  const handleUpdateRequestStatus = async (id: number, status: 'approved' | 'rejected') => {
+    try {
+      const res = await fetch(`${API_URL}/requests/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (res.ok) {
+        showToast(`Supply request #${id} marked as ${status}`);
+        await syncInventoryData(true);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error || `Failed to update request #${id}`, 'error');
+      }
+    } catch (err) {
+      showToast('Network error updating request status', 'error');
+    }
+  };
+
+  const handleCreateIngredientSupplyRequest = async (ingredientId: number, quantity: number, notes: string) => {
+    await handleCreateRequest({
+      ingredient_id: ingredientId,
+      quantity,
+      notes,
+      staff_name: currentUser?.name || 'Admin'
+    });
+  };
+
   /* const _handleDeleteRequest = async (id: number) => {
     try {
       const res = await fetch(`${API_URL}/requests/${id}`, { method: 'DELETE' });
@@ -407,8 +439,8 @@ function App() {
       if (res.ok) {
         const log: StockInLog = await res.json();
         const codes = (log.batches || []).map((b) => b.batch_code).join(', ');
-        showToast(`Received ${formatQty(log.quantity)} ${log.ingredient_unit} of ${log.ingredient_name}${codes ? ` · ${codes}` : ''}`);
-        syncInventoryData(true);
+        showToast(`Stocked in ${formatQty(log.quantity)} ${log.ingredient_unit} of ${log.ingredient_name}${codes ? ` · ${codes}` : ''}`);
+        await syncInventoryData(true);
         return true;
       }
       const err = await res.json().catch(() => ({}));
@@ -428,7 +460,7 @@ function App() {
       });
       if (res.ok) {
         showToast('Batch updated. The use-first order was recalculated.');
-        syncInventoryData(true);
+        await syncInventoryData(true);
         return true;
       }
       const err = await res.json().catch(() => ({}));
@@ -449,7 +481,7 @@ function App() {
       if (res.ok) {
         const batch: StockBatch = await res.json();
         showToast(`Discarded ${formatQty(data.quantity)} ${batch.ingredient_unit} of ${batch.ingredient_name} (${batch.batch_code})`);
-        syncInventoryData(true);
+        await syncInventoryData(true);
         return true;
       }
       const err = await res.json().catch(() => ({}));
@@ -472,8 +504,16 @@ function App() {
   }, []);
 
   // Badges calculations for Sidebar nav items
-  const lowStockCount = ingredients.filter(i => i.stock_level <= i.reorder_point).length;
+  const lowStockCount = ingredients.filter(i => {
+    const ingBatches = batches.filter(b => b.ingredient_id === i.id);
+    const activeUnexpired = ingBatches.filter(b => b.state === 'active' && b.expiry_status !== 'expired' && (Number(b.quantity_remaining) || 0) > 0);
+    const stock = ingBatches.length > 0
+      ? activeUnexpired.reduce((sum, b) => sum + (Number(b.quantity_remaining) || 0), 0)
+      : (Number(i.stock_level) || 0);
+    return stock <= i.reorder_point;
+  }).length;
   const pendingReviewsCount = reviews.filter(r => !r.is_published).length;
+  const pendingRequestsCount = requests.filter(r => r.status === 'pending').length;
   const expiringBatchCount = urgentBatchCount(batches);
 
   // ------------ REVIEW HANDLERS ------------
@@ -559,6 +599,7 @@ function App() {
           }} 
           lowStockCount={lowStockCount}
           pendingReviewsCount={pendingReviewsCount}
+          pendingRequestsCount={pendingRequestsCount}
           expiringBatchCount={expiringBatchCount}
         />
       </div>
@@ -588,6 +629,7 @@ function App() {
         {activeTab === 'ingredients' && (
           <IngredientsList
             ingredients={ingredients}
+            batches={batches}
             onCreateIngredient={handleCreateIngredient}
             onUpdateIngredient={handleUpdateIngredient}
             onDeleteIngredient={handleDeleteIngredient}
@@ -607,10 +649,13 @@ function App() {
         )}
 
         {activeTab === 'requests' && (
-          <ManageRequests
-            orders={orders}
-            menuItems={menuItems}
+          <IngredientSupplyRequests
+            requests={requests}
             ingredients={ingredients}
+            loading={loading}
+            onRefresh={() => syncInventoryData(false)}
+            onUpdateRequestStatus={handleUpdateRequestStatus}
+            onRequestIngredient={handleCreateIngredientSupplyRequest}
           />
         )}
 
@@ -618,12 +663,12 @@ function App() {
           <RecordStockIn 
             stockInLogs={stockInLogs}
             ingredients={ingredients}
-            requests={requests}
             batches={batches}
             currentUserName={currentUser?.name ?? null}
             onRecordStockIn={handleRecordStockIn}
             onUpdateBatch={handleUpdateBatch}
             onDiscardBatch={handleDiscardBatch}
+            onCreateIngredient={handleCreateIngredient}
           />
         )}
 
@@ -638,6 +683,10 @@ function App() {
         )}
 
         {activeTab === 'notifications' && <EmailNotifications showToast={showToast} />}
+
+        {activeTab === 'insights' && (
+          <SalesInsights showToast={showToast} currentUserName={currentUser?.name ?? null} onNavigate={setActiveTab} />
+        )}
 
         {activeTab === 'reports' && (
           <Reports 

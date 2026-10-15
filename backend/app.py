@@ -17,14 +17,16 @@ from models import (
 from notifications import bp as notifications_bp, safe_check_low_stock, start_scheduler
 from subscribers import bp as subscribers_bp, announce_menu_item, announcement_summary
 from batches import (
-    bp as batches_bp, build_batches, consume, ensure_batch_schema, reconcile, restore, store_today,
+    bp as batches_bp, build_batches, consume, ensure_batch_schema, recalculate_stock, reconcile, restore, store_today,
 )
+from insights import bp as insights_bp, ensure_insights_schema
 
 app = Flask(__name__)
 app.config.from_object(Config)
 app.register_blueprint(notifications_bp)
 app.register_blueprint(subscribers_bp)
 app.register_blueprint(batches_bp)
+app.register_blueprint(insights_bp)
 
 # Enable CORS for frontend requests
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -51,6 +53,7 @@ def _ensure_schema():
     ensure_order_guest_columns()
     ensure_notification_schema()
     ensure_batch_schema()
+    ensure_insights_schema()
     _schema_ready = True
     # Started from the first request (not at import) so init_db.py never runs a stray scheduler.
     start_scheduler(app)
@@ -94,13 +97,18 @@ def manage_ingredients():
         return jsonify(clean_decimal(ing.to_dict())), 201
 
     # GET ingredients
+    today = store_today()
     ingredients = Ingredient.query.order_by(Ingredient.category, Ingredient.name).all()
+    for ing in ingredients:
+        recalculate_stock(ing, today)
+    db.session.commit()
     return jsonify(clean_decimal([i.to_dict() for i in ingredients]))
 
 @app.route('/api/ingredients/<int:id>', methods=['PUT', 'DELETE'])
 def update_ingredient(id):
     ing = Ingredient.query.get_or_404(id)
     if request.method == 'DELETE':
+        MenuItemIngredient.query.filter_by(ingredient_id=id).delete()
         db.session.delete(ing)
         db.session.commit()
         return jsonify({'message': 'Ingredient deleted successfully'})
@@ -142,7 +150,7 @@ def _offered_from_payload(data, category):
 def _menu_recipe_fields(ing_item, offered_sizes):
     """Build MenuItemIngredient column values from API payload."""
     ingredient = Ingredient.query.get(ing_item['ingredient_id'])
-    default_qty = float(ing_item.get('default_quantity', 0))
+    default_qty = float(ing_item.get('default_quantity') if ing_item.get('default_quantity') is not None else ing_item.get('quantity', 0))
     offers = set(offered_sizes or [])
 
     if offers:
@@ -161,7 +169,7 @@ def _menu_recipe_fields(ing_item, offered_sizes):
             if ing_item.get('qty_large') is not None
             else qty_medium * 1.25
         )
-        if 'Medium' in offers:
+        if 'Regular' in offers or 'Medium' in offers:
             default_quantity = qty_medium
         elif 'Small' in offers:
             default_quantity = qty_small
@@ -197,6 +205,7 @@ def manage_menu():
             return jsonify({'error': 'Menu item name already exists'}), 400
 
         offered = _offered_from_payload(data, data['category'])
+        size_config = data.get('size_config')
         item = MenuItem(
             name=data['name'],
             category=data['category'],
@@ -207,6 +216,7 @@ def manage_menu():
             is_available=data.get('is_available', True),
             image_url=data.get('image_url'),
             offered_sizes=json.dumps(offered),
+            size_config=json.dumps(size_config) if size_config else None,
         )
         db.session.add(item)
         db.session.flush() # Populate ID
@@ -272,6 +282,9 @@ def update_menu_item(id):
         item.offered_sizes = json.dumps(offered)
     else:
         offered = offered_sizes_for(item)
+
+    if 'size_config' in data:
+        item.size_config = json.dumps(data['size_config']) if data['size_config'] else None
 
     if 'ingredients' in data:
         # Clear existing
@@ -453,8 +466,8 @@ def manage_stockin():
                 received_by=received_by,
                 received_at=now,
             ))
-        # Add quantity to ingredient stock
-        ing.stock_level += qty
+        # Recalculate stock from active batches
+        recalculate_stock(ing, store_today())
         db.session.commit()
         safe_check_low_stock()
         return jsonify(clean_decimal(stock_log.to_dict())), 201
@@ -548,6 +561,7 @@ def place_order():
         customs_dict = {c['ingredient_id']: c.get('level', 'Regular') for c in customs if 'ingredient_id' in c}
         size = order_size_for(menu_item, item.get('size'))
 
+        handled_packaging = set()
         for recipe_item in menu_item.ingredients:
             ing_id = recipe_item.ingredient_id
             is_cust = recipe_item.is_customizable
@@ -557,7 +571,25 @@ def place_order():
 
             base_qty = recipe_qty_for_size(recipe_item, size)
             needed = qty * (base_qty * multiplier)
+            if needed > 0:
+                handled_packaging.add(ing_id)
             required_ingredients[ing_id] = required_ingredients.get(ing_id, 0.0) + needed
+
+        # Ensure linked packaging from size_config (cup & straw) are included in requirements
+        if menu_item.size_config and size:
+            try:
+                sc = json.loads(menu_item.size_config)
+                size_entry = sc.get(size) if isinstance(sc, dict) else None
+                if isinstance(size_entry, dict):
+                    cup_id = size_entry.get('container_id')
+                    straw_id = size_entry.get('straw_id')
+                    for pack_id in (cup_id, straw_id):
+                        if pack_id and int(pack_id) not in handled_packaging:
+                            pack_id_int = int(pack_id)
+                            required_ingredients[pack_id_int] = required_ingredients.get(pack_id_int, 0.0) + float(qty)
+                            handled_packaging.add(pack_id_int)
+            except (ValueError, TypeError):
+                app.logger.warning('Ignoring malformed size_config on menu item %s', menu_item.id)
 
     # If it is a customer order (pending status), check if we have enough ingredients
     if data.get('status') == 'pending':
@@ -585,6 +617,7 @@ def place_order():
             if 'ingredient_id' in c:
                 customs_dict[c['ingredient_id']] = c.get('level', 'Regular')
 
+        handled_packaging = set()
         for recipe_item in menu_item.ingredients:
             ing_id = recipe_item.ingredient_id
             is_cust = recipe_item.is_customizable
@@ -594,6 +627,8 @@ def place_order():
 
             base_qty = recipe_qty_for_size(recipe_item, size)
             needed = qty * (base_qty * multiplier)
+            if needed > 0:
+                handled_packaging.add(ing_id)
             ing = Ingredient.query.get(ing_id)
             if ing:
                 consume(ing, needed, today)
@@ -605,6 +640,24 @@ def place_order():
                     "level": level,
                     "size": size,
                 })
+
+        # Ensure linked cup and straw from size_config are deducted if not already in recipe_items
+        if menu_item.size_config and size:
+            try:
+                sc = json.loads(menu_item.size_config)
+                size_entry = sc.get(size) if isinstance(sc, dict) else None
+                if isinstance(size_entry, dict):
+                    cup_id = size_entry.get('container_id')
+                    straw_id = size_entry.get('straw_id')
+                    for pack_id in (cup_id, straw_id):
+                        if pack_id and int(pack_id) not in handled_packaging:
+                            pack_id_int = int(pack_id)
+                            pack_ing = Ingredient.query.get(pack_id_int)
+                            if pack_ing:
+                                consume(pack_ing, float(qty), today)
+                            handled_packaging.add(pack_id_int)
+            except (ValueError, TypeError):
+                app.logger.warning('Ignoring malformed size_config on menu item %s', menu_item.id)
 
         order_items.append(OrderItem(
             menu_item_id=menu_item_id,
@@ -997,5 +1050,6 @@ if __name__ == '__main__':
             print('Existing database detected — preserving schema and data.')
 
     port = int(os.getenv('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    host = os.getenv('HOST', '::')
+    app.run(host=host, port=port, debug=True)
 
